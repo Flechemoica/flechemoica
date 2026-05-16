@@ -6,6 +6,7 @@ body {
 
 body {
   min-height: 100vh;
+  min-height: 100svh;
   font-family: Tahoma, Verdana, Arial, sans-serif;
   background: #000;
   color: #111;
@@ -15,6 +16,7 @@ body {
 
 .xp-desktop {
   min-height: 100vh;
+  min-height: 100svh;
   box-sizing: border-box;
   padding: 10px;
   display: flex;
@@ -194,21 +196,44 @@ body {
  }
 
 .wizzing .xp-window {
-  animation: wizz-shake 0.6s linear;
+  animation: wizz-shake 0.6s linear !important;
+  will-change: transform;
 }
 
 @keyframes wizz-shake {
-  0% { transform: translate(0, 0) rotate(0deg); }
-  10% { transform: translate(-8px, 4px) rotate(-1deg); }
-  20% { transform: translate(8px, -4px) rotate(1deg); }
-  30% { transform: translate(-10px, 3px) rotate(-1deg); }
-  40% { transform: translate(10px, -3px) rotate(1deg); }
-  50% { transform: translate(-7px, 5px) rotate(-0.8deg); }
-  60% { transform: translate(7px, -5px) rotate(0.8deg); }
-  70% { transform: translate(-4px, 2px) rotate(-0.4deg); }
-  80% { transform: translate(4px, -2px) rotate(0.4deg); }
-  90% { transform: translate(-2px, 1px) rotate(-0.2deg); }
-  100% { transform: translate(0, 0) rotate(0deg); }
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  10% {
+    transform: translate3d(-12px, 5px, 0) rotate(-1.2deg);
+  }
+  20% {
+    transform: translate3d(12px, -5px, 0) rotate(1.2deg);
+  }
+  30% {
+    transform: translate3d(-14px, 4px, 0) rotate(-1deg);
+  }
+  40% {
+    transform: translate3d(14px, -4px, 0) rotate(1deg);
+  }
+  50% {
+    transform: translate3d(-10px, 6px, 0) rotate(-0.8deg);
+  }
+  60% {
+    transform: translate3d(10px, -6px, 0) rotate(0.8deg);
+  }
+  70% {
+    transform: translate3d(-6px, 3px, 0) rotate(-0.5deg);
+  }
+  80% {
+    transform: translate3d(6px, -3px, 0) rotate(0.5deg);
+  }
+  90% {
+    transform: translate3d(-2px, 1px, 0) rotate(-0.2deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
 }
 
 @media (max-width: 640px) {
@@ -217,12 +242,12 @@ body {
   }
 
   .xp-desktop {
-    padding: 6px;
-    align-items: center;
+    padding: 8px 8px 24px;
+    align-items: flex-start;
   }
 
   .xp-window {
-    height: calc(100vh - 12px);
+    height: calc(100svh - 32px);
     border-width: 2px;
   }
 
