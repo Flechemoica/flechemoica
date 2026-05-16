@@ -626,4 +626,11 @@ body {
   .definition-item {
     padding: 2px;
   }
+
+  .crossword-wrap,
+  .crossword-wrapper {
+    width: min(calc(100svh - 170px), calc(100vw - 6px));
+    max-width: calc(100% - 2px);
+    padding: 0 1px;
+  }
 }
