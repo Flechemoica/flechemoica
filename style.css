@@ -482,7 +482,7 @@ body {
   position: relative;
   z-index: 1;
   text-align: center;
-  padding-top: 0.08em;
+  padding-top: 0;
   text-transform: uppercase;
   font-family: Arial, Helvetica, sans-serif;
   font-variant-ligatures: none;
@@ -496,7 +496,7 @@ body {
   word-break: keep-all;
   hyphens: none;
   white-space: normal;
-  line-height: 1.08;
+  line-height: 1.12;
 }
 
 .double-definition-cell .definition-text {
@@ -761,7 +761,17 @@ body {
   }
 
   .definition-cell {
-    font-size: clamp(0.24rem, 1.25vw, 0.56rem);
+    font-size: clamp(0.2rem, 1.05vw, 0.48rem);
+  }
+
+  .definition-text {
+    line-height: 1.18;
+    transform: translateY(1px);
+  }
+
+  .double-definition-cell .definition-text {
+    font-size: 0.72em;
+    line-height: 1.12;
   }
 }
 
@@ -769,6 +779,7 @@ body {
 .crossword-wrap,
 .crossword-wrapper {
   position: relative;
+  overflow: hidden;
 }
 
 .game-start-panel {
@@ -802,5 +813,8 @@ body {
 
 .game-blurred {
   filter: blur(14px);
+  transform: scale(1.04);
+  transform-origin: center;
   pointer-events: none;
-  user-select: none;}
+  user-select: none;
+}
