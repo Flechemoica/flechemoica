@@ -22,7 +22,7 @@
 
       <div class="xp-menu-bar">
         <a href="/" class="menu-link">Accueil</a>
-        <a href="#" class="menu-link" id="test-link">Test</a>
+        <a href="/grilletest.html" class="menu-link">Test</a>
         <a href="mailto:contact@flechemoica.fr" class="menu-contact">Contact</a>
       </div>
 
@@ -65,7 +65,6 @@
 
     let wizzRowId = null;
     const wizzButton = document.getElementById('wizz-button');
-    const testLink = document.getElementById('test-link');
     const wizzCount = document.getElementById('wizz-count');
 
     async function loadCount() {
@@ -119,21 +118,6 @@
       setTimeout(() => {
         document.body.classList.remove('wizzing');
       }, 600);
-    });
-
-    testLink.addEventListener('click', (event) => {
-      event.preventDefault();
-
-      const password = prompt('Mot de passe ?');
-
-      if (password === 'simone') {
-        window.location.href = '/grilletest.html';
-        return;
-      }
-
-      if (password !== null) {
-        alert('Mot de passe incorrect');
-      }
     });
   </script>
 </body>

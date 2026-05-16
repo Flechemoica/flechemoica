@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -33,7 +31,14 @@
 
       <main class="grid-page">
         <section class="crossword-wrap" aria-label="Grille de mots fléchés">
-          <div class="crossword-grid" id="crossword-grid"></div>
+          <div class="game-start-panel card" id="game-start-panel">
+            <h2>Prêt à jouer ?</h2>
+            <p>Appuie sur Jouer pour lancer la partie.</p>
+            <button type="button" class="xp-button" id="play-button">Jouer</button>
+          </div>
+
+          <div class="game-timer" id="game-timer">00:00</div>
+          <div class="crossword-grid game-blurred" id="crossword-grid"></div>
         </section>
       </main>
 
@@ -47,6 +52,27 @@
 
   <script>
     const JSON_FILE = 'grille1.json';
+
+    let timerInterval = null;
+    let timerStartTime = null;
+
+    function formatElapsedTime(milliseconds) {
+      const totalSeconds = Math.floor(milliseconds / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+
+      return `${minutes}:${seconds}`;
+    }
+
+    function startTimer() {
+      const timer = document.getElementById('game-timer');
+      timerStartTime = Date.now();
+      timer.textContent = '00:00';
+
+      timerInterval = setInterval(() => {
+        timer.textContent = formatElapsedTime(Date.now() - timerStartTime);
+      }, 250);
+    }
 
     function parseWord(word) {
       const letters = [];
@@ -216,6 +242,20 @@
           </div>
         `;
       }
+      const startPanel = document.getElementById('game-start-panel');
+      const playButton = document.getElementById('play-button');
+      const grid = document.getElementById('crossword-grid');
+      const timer = document.getElementById('game-timer');
+
+      grid.classList.add('game-blurred');
+      timer.classList.add('game-not-started');
+
+      playButton.addEventListener('click', () => {
+        startPanel.classList.add('game-start-hidden');
+        grid.classList.remove('game-blurred');
+        timer.classList.remove('game-not-started');
+        startTimer();
+      });
     }
 
     initGrid();
