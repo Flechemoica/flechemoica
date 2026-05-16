@@ -153,6 +153,13 @@ body {
   overflow: hidden;
 }
 
+.main-logo {
+  display: block;
+  width: min(320px, 80%);
+  height: auto;
+  margin: 0 auto;
+}
+
 
 .xp-header h1 {
   margin: 0;
@@ -702,6 +709,10 @@ body {
 
   .xp-header {
     padding: 18px 12px 10px;
+  }
+
+  .main-logo {
+    width: min(240px, 82%);
   }
 
   .xp-header h1 {
