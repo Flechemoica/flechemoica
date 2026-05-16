@@ -7,6 +7,10 @@ body {
   overflow-x: hidden;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   min-height: 100vh;
   min-height: 100svh;
@@ -33,6 +37,7 @@ body {
 .xp-window {
   width: min(920px, 100%);
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   height: calc(100svh - 2px);
   display: flex;
@@ -58,15 +63,22 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   font-weight: bold;
   text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.55);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .xp-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 0.98rem;
 }
 
 .xp-window-buttons {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .xp-window-buttons button {
@@ -98,6 +110,8 @@ body {
   color: #222;
   font-size: 0.92rem;
   align-items: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .xp-menu-bar a,
@@ -132,15 +146,20 @@ body {
 .xp-header {
   padding: 24px 16px 12px;
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 
 .xp-header h1 {
   margin: 0;
-  font-size: 3.2rem;
+  font-size: clamp(2rem, 7vw, 3.2rem);
   color: #123d8f;
   letter-spacing: -0.04em;
   text-shadow: 2px 2px 0 #fff;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .container {
@@ -150,6 +169,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
 }
 
 .card {
@@ -161,6 +181,8 @@ body {
     inset 1px 1px 0 #ffffff,
     inset -1px -1px 0 #aca899,
     4px 4px 0 rgba(0, 0, 0, 0.12);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .card h2 {
@@ -540,12 +562,19 @@ body {
   }
 
   .xp-header h1 {
-    font-size: clamp(1.55rem, 8.5vw, 3.2rem);
+    font-size: clamp(1.45rem, 7.2vw, 2.2rem);
+    max-width: 100%;
+    overflow: hidden;
     white-space: nowrap;
   }
 
   .xp-header {
     overflow: hidden;
+  }
+
+  .card {
+    width: min(430px, calc(100% - 24px));
+    max-width: calc(100% - 24px);
   }
 
   .container {
