@@ -1,21 +1,37 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
 .site-footer {
+  margin-top: auto;
   padding: 30px 20px;
   text-align: center;
-  font-size: 0.95rem;
-  color: #ff6fae;
+  background: #000;
   font-family: Arial, sans-serif;
+  font-size: 0.95rem;
+  color: #666;
 }
 
 .site-footer p {
   margin: 0;
-  line-height: 1.8;
 }
 
-.site-footer a {
-  color: inherit;
+.site-footer a,
+.site-footer a:visited,
+.site-footer a:hover,
+.site-footer a:active {
+  color: #666;
   text-decoration: none;
-}
-
-.site-footer a:hover {
-  opacity: 0.7;
 }
