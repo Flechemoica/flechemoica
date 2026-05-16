@@ -830,3 +830,16 @@ body {
   pointer-events: none;
   user-select: none;
 }
+
+.finish-menu-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.finish-menu-link[hidden] {
+  display: none;
+}
