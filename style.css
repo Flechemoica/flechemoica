@@ -320,8 +320,8 @@ body {
 
 .letter-cell {
   color: #111;
-  font-size: clamp(1rem, 2.8vw, 2.4rem);
-  font-weight: bold;
+  font-size: clamp(1.15rem, 3.1vw, 2.4rem);
+  font-weight: normal;
   text-transform: uppercase;
   position: relative;
 }
@@ -700,5 +700,10 @@ body {
     max-width: calc(100% - 2px);
     max-height: calc(100% - 2px);
     padding: 0 1px;
+  }
+
+  .letter-cell {
+    font-size: clamp(1rem, 5.8vw, 2.1rem);
+    font-weight: normal;
   }
 }
