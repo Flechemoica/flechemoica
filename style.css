@@ -76,6 +76,9 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
   font-size: 0.98rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .xp-window-buttons {
@@ -842,4 +845,13 @@ body {
 
 .finish-menu-link[hidden] {
   display: none;
+}
+
+.titlebar-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.55));
 }
