@@ -1,0 +1,209 @@
+
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grille test — Flèche-moi ça</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="xp-desktop">
+    <div class="xp-window grid-window">
+
+      <div class="xp-titlebar">
+        <div class="xp-title">Grille 1.exe</div>
+
+        <div class="xp-window-buttons">
+          <button aria-label="Réduire">_</button>
+          <button aria-label="Agrandir">□</button>
+          <button aria-label="Fermer">×</button>
+        </div>
+      </div>
+
+      <div class="xp-menu-bar">
+        <a href="/" class="menu-link">Accueil</a>
+        <a href="mailto:contact@flechemoica.fr" class="menu-contact">Contact</a>
+      </div>
+
+      <header class="xp-header grid-header">
+        <h1>Grille 1 🧩</h1>
+      </header>
+
+      <main class="grid-page">
+        <section class="crossword-wrap" aria-label="Grille de mots fléchés">
+          <div class="crossword-grid" id="crossword-grid"></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <span>© 2026 Flèche-moi ça</span>
+        <a href="/mentions-legales.html">Mentions légales</a>
+      </footer>
+
+    </div>
+  </div>
+
+  <script>
+    const JSON_FILE = 'grille1.json';
+
+    function parseWord(word) {
+      const letters = [];
+      const separators = [];
+
+      [...word].forEach((character) => {
+        if (character === ' ' || character === '-' || character === '‑') {
+          if (letters.length > 0) {
+            separators.push(letters.length - 1);
+          }
+          return;
+        }
+
+        letters.push(character);
+      });
+
+      return { letters, separators };
+    }
+
+    function arrowForDirection(direction) {
+      if (direction.rowDelta === 1 && direction.columnDelta === 0) {
+        return direction.startColumnDelta === 1 ? 'corner-down-right' : 'down';
+      }
+
+      if (direction.rowDelta === 0 && direction.columnDelta === 1) {
+        return direction.startRowDelta === 1 ? 'corner-right-down' : 'right';
+      }
+
+      return 'right';
+    }
+
+    async function loadGridData() {
+      const response = await fetch(JSON_FILE);
+
+      if (!response.ok) {
+        throw new Error(`Impossible de charger ${JSON_FILE}`);
+      }
+
+      return response.json();
+    }
+
+    function buildGrid(data) {
+      const cells = new Map();
+      let maxRow = 0;
+      let maxColumn = 0;
+
+      data.placedWords.forEach((placedWord) => {
+        const { definitionCell, direction, word, definitions } = placedWord;
+        const parsedWord = parseWord(word);
+        const startColumn = definitionCell.column + direction.startColumnDelta;
+        const startRow = definitionCell.row + direction.startRowDelta;
+        const definitionKey = `${definitionCell.column},${definitionCell.row}`;
+
+        if (!cells.has(definitionKey)) {
+          cells.set(definitionKey, {
+            type: 'definition',
+            clues: []
+          });
+        }
+
+        const definitionCellData = cells.get(definitionKey);
+        const definitionText = definitions.length ? definitions[0] : 'Définition à venir';
+        const arrow = arrowForDirection(direction);
+
+        definitionCellData.clues.push({
+          text: definitionText,
+          arrow
+        });
+
+        maxColumn = Math.max(maxColumn, definitionCell.column);
+        maxRow = Math.max(maxRow, definitionCell.row);
+
+        parsedWord.letters.forEach((letter, index) => {
+          const column = startColumn + direction.columnDelta * index;
+          const row = startRow + direction.rowDelta * index;
+          const key = `${column},${row}`;
+          const separatorAfter = parsedWord.separators.includes(index);
+
+          cells.set(key, {
+            type: 'letter',
+            letter,
+            separatorAfter,
+            direction
+          });
+
+          maxColumn = Math.max(maxColumn, column);
+          maxRow = Math.max(maxRow, row);
+        });
+      });
+
+      const grid = document.getElementById('crossword-grid');
+      grid.innerHTML = '';
+
+      const columnCount = maxColumn + 1;
+      const rowCount = maxRow + 1;
+      grid.parentElement.style.setProperty('--grid-ratio', `${columnCount} / ${rowCount}`);
+      grid.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
+
+      for (let row = 0; row <= maxRow; row += 1) {
+        for (let column = 0; column <= maxColumn; column += 1) {
+          const key = `${column},${row}`;
+          const cellData = cells.get(key);
+          const cell = document.createElement('div');
+          cell.classList.add('grid-cell');
+
+          if (!cellData) {
+            cell.classList.add('empty-cell');
+          } else if (cellData.type === 'definition') {
+            cell.classList.add('definition-cell');
+
+            if (cellData.clues.length > 1) {
+              cell.classList.add('double-definition-cell');
+            }
+
+            cell.innerHTML = cellData.clues.map((clue) => `
+              <div class="definition-item definition-${clue.arrow}">
+                <div class="definition-text">${clue.text}</div>
+                <div class="definition-arrow arrow-${clue.arrow}"></div>
+              </div>
+            `).join('');
+          } else {
+            cell.classList.add('letter-cell');
+
+            if (cellData.separatorAfter) {
+              if (cellData.direction.rowDelta === 0 && cellData.direction.columnDelta === 1) {
+                cell.classList.add('separator-right');
+              }
+
+              if (cellData.direction.rowDelta === 1 && cellData.direction.columnDelta === 0) {
+                cell.classList.add('separator-bottom');
+              }
+            }
+
+            cell.textContent = cellData.letter;
+          }
+
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    async function initGrid() {
+      try {
+        const gridData = await loadGridData();
+        buildGrid(gridData);
+      } catch (error) {
+        console.error(error);
+        document.getElementById('crossword-grid').innerHTML = `
+          <div class="grid-error">
+            Impossible de charger la grille.<br>
+            Vérifie que le fichier <strong>${JSON_FILE}</strong> existe bien.
+          </div>
+        `;
+      }
+    }
+
+    initGrid();
+  </script>
+</body>
+</html>
