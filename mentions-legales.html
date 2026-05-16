@@ -6,6 +6,11 @@
   <title>Mentions légales — Flèche-moi ça</title>
   <link rel="stylesheet" href="style.css">
 </head>
+<script>
+  document.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+  });
+</script>
 <body>
   <div class="xp-desktop">
     <div class="xp-window">
@@ -22,6 +27,7 @@
 
       <div class="xp-menu-bar">
         <a href="/" class="menu-link">Accueil</a>
+        <a href="/grilletest.html" class="menu-link">Test</a>
         <a href="mailto:contact@flechemoica.fr" class="menu-contact">Contact</a>
       </div>
 
