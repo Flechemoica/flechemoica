@@ -9,7 +9,8 @@ body {
   font-family: Tahoma, Verdana, Arial, sans-serif;
   background: #000;
   color: #111;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .xp-desktop {
@@ -192,6 +193,10 @@ body {
 }
 
 @media (max-width: 640px) {
+  body {
+    overflow-y: auto;
+  }
+
   .xp-desktop {
     padding: 6px;
     align-items: center;
