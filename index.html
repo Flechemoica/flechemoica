@@ -6,7 +6,6 @@
   <title>Flèche-moi ça</title>
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
   <div class="xp-desktop">
     <div class="xp-window">
@@ -44,22 +43,23 @@
             Wizz envoyés : <span id="wizz-count">0</span>
           </p>
 
-          <button class="xp-button wizz-button" id="wizz-button" type="button">
-            ≋ 😄 ≋
+          <button class="xp-button wizz-button" id="wizz-button" type="button" aria-label="Envoyer un Wizz">
+            🫨
           </button>
         </section>
       </main>
 
       <footer class="site-footer">
         <p>
-          © 2026 Flèche-moi ça ·
-          <a href="mailto:contact@flechemoica.fr">Contact</a> ·
+          <span>© 2026 Flèche-moi ça</span>
+          <a href="mailto:contact@flechemoica.fr">Contact</a>
           <a href="/mentions-legales.html">Mentions légales</a>
         </p>
       </footer>
 
     </div>
   </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const SUPABASE_URL = 'https://tkgvmiykmoflzufjluwt.supabase.co';
