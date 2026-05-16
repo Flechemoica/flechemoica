@@ -18,6 +18,8 @@ body {
   min-height: 100vh;
   min-height: 100svh;
   box-sizing: border-box;
+  width: 100%;
+  overflow-x: hidden;
   padding: 0;
   display: flex;
   align-items: flex-start;
@@ -25,8 +27,9 @@ body {
 }
 
 .xp-window {
-  width: 100%;
+  width: min(920px, 100vw);
   max-width: 920px;
+  box-sizing: border-box;
   height: calc(100svh - 2px);
   display: flex;
   flex-direction: column;
@@ -503,16 +506,20 @@ body {
 
 @media (max-width: 640px) {
   .xp-desktop {
+    width: 100vw;
+    max-width: 100vw;
     min-height: 100svh;
     padding: 0;
     align-items: flex-start;
+    overflow-x: hidden;
   }
 
   .xp-window {
-    width: 100%;
-    max-width: 100%;
+    width: 100vw;
+    max-width: 100vw;
     min-width: 0;
     height: 100svh;
+    box-sizing: border-box;
     border-width: 2px;
     border-radius: 9px 9px 5px 5px;
   }
@@ -528,7 +535,12 @@ body {
   }
 
   .xp-header h1 {
-    font-size: 3.2rem;
+    font-size: clamp(2rem, 10vw, 3.2rem);
+    white-space: nowrap;
+  }
+
+  .xp-header {
+    overflow: hidden;
   }
 
   .container {
