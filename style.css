@@ -500,9 +500,9 @@ body {
 }
 
 .double-definition-cell .definition-text {
-  -webkit-line-clamp: 2;
-  font-size: 0.78em;
-  line-height: 1.02;
+  font-size: 0.72em;
+  line-height: 1.18;
+  transform: translateY(1px);
 }
 
 .definition-arrow {
@@ -757,7 +757,7 @@ body {
   }
 
   .definition-item {
-    padding: 2px;
+    padding: 3px 2px 1px;
   }
 
   .definition-cell {
@@ -770,8 +770,9 @@ body {
   }
 
   .double-definition-cell .definition-text {
-    font-size: 0.72em;
-    line-height: 1.12;
+    font-size: 0.66em;
+    line-height: 1.22;
+    transform: translateY(1px);
   }
 }
 
