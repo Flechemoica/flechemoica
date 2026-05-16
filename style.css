@@ -342,9 +342,10 @@ body {
   justify-content: stretch;
   background: #e9f2ff;
   color: #111;
-  font-size: clamp(0.38rem, 0.8vw, 0.68rem);
+  font-size: clamp(0.26rem, 0.7vw, 0.68rem);
   line-height: 1.05;
-  text-align: left;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .definition-item {
@@ -354,10 +355,14 @@ body {
   padding: 3px 4px;
   box-sizing: border-box;
   overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .definition-item + .definition-item {
-  border-top: 1px solid #7f9db9;
+  border-top: 2px solid #111;
 }
 
 .definition-text {
@@ -366,6 +371,22 @@ body {
   overflow: hidden;
   position: relative;
   z-index: 1;
+  text-align: center;
+  text-transform: uppercase;
+  font-family: Arial, Helvetica, sans-serif;
+  font-variant-ligatures: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow-wrap: anywhere;
+}
+
+.double-definition-cell .definition-text {
+  -webkit-line-clamp: 2;
+  font-size: 0.82em;
+  line-height: 1;
 }
 
 .definition-arrow {
@@ -384,13 +405,13 @@ body {
 }
 
 .definition-arrow.arrow-right {
-  left: calc(100% - 1px);
+  left: calc(100% + 2px);
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(0, -50%);
 }
 
 .definition-arrow.arrow-right::before {
-  left: 0;
+  left: 0px;
   top: 6px;
   width: 8px;
   height: 1px;
@@ -399,11 +420,11 @@ body {
 
 .definition-arrow.arrow-right::after {
   right: 0;
-  top: 2px;
+  top: 3.5px;
   width: 0;
   height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
   border-left: 6px solid #111;
 }
 
@@ -414,70 +435,70 @@ body {
 }
 
 .definition-arrow.arrow-down::before {
-  left: 6px;
-  top: 0;
+  left: 7px;
+  top: 2px;
   width: 1px;
-  height: 8px;
+  height: 14px;
   background: #111;
 }
 
 .definition-arrow.arrow-down::after {
-  left: 2px;
-  bottom: 0;
+  left: 4.5px;
+  bottom: -3px;
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
   border-top: 6px solid #111;
 }
 
-.definition-arrow.arrow-corner-down-right,
-.definition-arrow.arrow-corner-right-down {
+.definition-arrow.arrow-corner-down-right {
   left: calc(100% - 1px);
-  top: calc(100% - 1px);
+  top: 50%;
+  transform: translateY(-1px);
 }
 
 .definition-arrow.arrow-corner-down-right::before {
-  left: 0;
-  top: -6px;
-  width: 1px;
-  height: 7px;
-  background: #111;
-  box-shadow:
-    0 6px 0 #111,
-    4px 6px 0 #111,
-    8px 6px 0 #111;
+  left: 1px;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid #111;
+  border-right: 1px solid #111;
 }
 
 .definition-arrow.arrow-corner-down-right::after {
-  left: 7px;
-  bottom: -5px;
+  left: 5.5px;
+  top: 8px;
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
   border-top: 6px solid #111;
 }
 
+.definition-arrow.arrow-corner-right-down {
+  left: 50%;
+  top: calc(100% - 1px);
+  transform: translateX(-1px);
+}
+
 .definition-arrow.arrow-corner-right-down::before {
-  left: -6px;
-  top: 0;
-  width: 7px;
-  height: 1px;
-  background: #111;
-  box-shadow:
-    6px 0 0 #111,
-    6px 4px 0 #111,
-    6px 8px 0 #111;
+  left: 0;
+  top: 2px;
+  width: 8px;
+  height: 8px;
+  border-left: 1px solid #111;
+  border-bottom: 1px solid #111;
 }
 
 .definition-arrow.arrow-corner-right-down::after {
-  right: -5px;
-  top: 7px;
+  left: 8px;
+  top: 6.5px;
   width: 0;
   height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
   border-left: 6px solid #111;
 }
 
@@ -620,7 +641,7 @@ body {
   }
 
   .definition-cell {
-    font-size: clamp(0.32rem, 1.8vw, 0.52rem);
+    font-size: clamp(0.24rem, 1.35vw, 0.52rem);
   }
 
   .definition-item {
@@ -629,7 +650,7 @@ body {
 
   .crossword-wrap,
   .crossword-wrapper {
-    width: min(calc(100svh - 170px), calc(100vw - 16px));
+    width: min(calc(100svh - 170px), calc(100vw - 20px));
     max-width: calc(100% - 2px);
     padding: 0 1px;
   }

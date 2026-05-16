@@ -113,7 +113,11 @@
 
         definitionCellData.clues.push({
           text: definitionText,
-          arrow
+          arrow,
+          startRowDelta: direction.startRowDelta,
+          startColumnDelta: direction.startColumnDelta,
+          rowDelta: direction.rowDelta,
+          columnDelta: direction.columnDelta
         });
 
         maxColumn = Math.max(maxColumn, definitionCell.column);
@@ -161,7 +165,18 @@
               cell.classList.add('double-definition-cell');
             }
 
-            cell.innerHTML = cellData.clues.map((clue) => `
+            const orderedClues = [...cellData.clues].sort((a, b) => {
+              const order = {
+                'corner-down-right': 0,
+                down: 1,
+                right: 2,
+                'corner-right-down': 3
+              };
+
+              return (order[a.arrow] ?? 0) - (order[b.arrow] ?? 0);
+            });
+
+            cell.innerHTML = orderedClues.map((clue) => `
               <div class="definition-item definition-${clue.arrow}">
                 <div class="definition-text">${clue.text}</div>
                 <div class="definition-arrow arrow-${clue.arrow}"></div>
