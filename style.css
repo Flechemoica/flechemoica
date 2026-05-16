@@ -422,7 +422,7 @@ body {
   flex: 1;
   min-height: 0;
   width: 100%;
-  padding: 1px 3px;
+  padding: 3px 3px 1px;
   box-sizing: border-box;
   overflow: visible;
   display: flex;
@@ -482,25 +482,27 @@ body {
   position: relative;
   z-index: 1;
   text-align: center;
+  padding-top: 0.08em;
   text-transform: uppercase;
   font-family: Arial, Helvetica, sans-serif;
   font-variant-ligatures: none;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
   overflow-wrap: normal;
   word-break: keep-all;
   hyphens: none;
   white-space: normal;
-  line-height: 0.95;
+  line-height: 1.08;
 }
 
 .double-definition-cell .definition-text {
   -webkit-line-clamp: 2;
   font-size: 0.78em;
-  line-height: 0.95;
+  line-height: 1.02;
 }
 
 .definition-arrow {
