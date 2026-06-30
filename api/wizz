@@ -1,0 +1,25 @@
+export default {
+  async fetch(request, env) {
+    const headers = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Content-Type": "application/json",
+    };
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers });
+    }
+
+    let count = Number(await env.WIZZ_KV.get("count") || 0);
+
+    if (request.method === "POST") {
+      count++;
+      await env.WIZZ_KV.put("count", String(count));
+    }
+
+    return new Response(JSON.stringify({ count }), {
+      headers,
+    });
+  },
+};

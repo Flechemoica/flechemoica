@@ -34,9 +34,7 @@
       <div class="xp-menu-bar">
         <a href="/" class="menu-link">Accueil</a>
         <a href="/grilletest.html" class="menu-link">Essayer</a>
-        <a href="https://www.instagram.com/flechemoica/" class="menu-contact" target="_blank" rel="noopener noreferrer" aria-label="Instagram">Instagram</a>
-        <a href="https://www.tiktok.com/@flechemoica" class="menu-contact" target="_blank" rel="noopener noreferrer" aria-label="TikTok">TikTok</a>
-        <a href="mailto:contact@flechemoica.fr" class="menu-contact" aria-label="Envoyer un mail">Contact</a>
+        <a href="mailto:contact@flechemoica.fr" class="menu-contact" style="margin-left:auto;" aria-label="Envoyer un mail">Contact</a>
       </div>
 
       <header class="xp-header">
@@ -69,51 +67,52 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = 'https://tkgvmiykmoflzufjluwt.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_H0i2NDlNl110RYm2uoGcOQ_SB1XMd0J';
-
-    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    let wizzRowId = null;
+    const WIZZ_API_URL = '/api/wizz';
     const wizzButton = document.getElementById('wizz-button');
     const wizzCount = document.getElementById('wizz-count');
 
     async function loadCount() {
-      const { data, error } = await client
-        .from('wizz')
-        .select('id, count')
-        .limit(1)
-        .single();
+      try {
+        const response = await fetch(WIZZ_API_URL, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+        });
 
-      if (error) {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        wizzCount.textContent = Number(data.count || 0);
+      } catch (error) {
         console.error('Erreur chargement Wizz :', error);
-        return;
-      }
-
-      if (data) {
-        wizzRowId = data.id;
-        wizzCount.textContent = data.count;
       }
     }
 
     async function incrementCount() {
-      if (wizzRowId === null) {
-        await loadCount();
-      }
-
       const current = Number(wizzCount.textContent || 0);
-      const newCount = current + 1;
+      const optimisticCount = current + 1;
 
-      wizzCount.textContent = newCount;
+      wizzCount.textContent = optimisticCount;
 
-      const { error } = await client
-        .from('wizz')
-        .update({ count: newCount })
-        .eq('id', wizzRowId);
+      try {
+        const response = await fetch(WIZZ_API_URL, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+          },
+        });
 
-      if (error) {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        wizzCount.textContent = Number(data.count || optimisticCount);
+      } catch (error) {
         console.error('Erreur mise à jour Wizz :', error);
         wizzCount.textContent = current;
       }
@@ -134,19 +133,4 @@
     });
   </script>
 </body>
-<script>
-  document.querySelector('a[aria-label="Instagram"]')?.addEventListener('click', (e) => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (isMobile) {
-      e.preventDefault();
-
-      window.location.href = 'instagram://user?username=flechemoica';
-
-      setTimeout(() => {
-        window.open('https://www.instagram.com/flechemoica/', '_blank');
-      }, 500);
-    }
-  });
-</script>
 </html>
