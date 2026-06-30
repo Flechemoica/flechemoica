@@ -33,7 +33,7 @@
 
       <div class="xp-menu-bar">
         <a href="/" class="menu-link">Accueil</a>
-        <a href="/grilletest.html" class="menu-link">Essayer</a>
+        <a href="/grilletest.html" class="menu-link" id="test-link" style="display:none;">Essayer</a>
         <a href="mailto:contact@flechemoica.fr" class="menu-contact" style="margin-left:auto;" aria-label="Envoyer un mail">Contact</a>
       </div>
 
@@ -71,6 +71,14 @@
     const WIZZ_API_URL = 'https://withered-mountain-e272.lrphoton-stats.workers.dev';
     const wizzButton = document.getElementById('wizz-button');
     const wizzCount = document.getElementById('wizz-count');
+    const testLink = document.getElementById('test-link');
+
+    if (
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'localhost'
+    ) {
+      testLink.style.display = '';
+    }
 
     async function loadCount() {
       try {
