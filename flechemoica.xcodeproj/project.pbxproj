@@ -3,17 +3,41 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 90;
+	objectVersion = 100;
 	objects = {
+
+/* Begin PBXBuildFile section */
+		020732632FFED28900721498 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 020732622FFED28900721498 /* FirebaseAuth */; };
+		020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 020732672FFEED2E00721498 /* FirebaseFirestore */; };
+		020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 020732702FFEFCBB00721498 /* GoogleMobileAds */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* flechemoica.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = flechemoica.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		020732762FFEFE1700721498 /* Exceptions for "flechemoica" folder in "flechemoica" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 000000000000000100000000 /* flechemoica */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		000000000000000000000010 /* flechemoica */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				020732762FFEFE1700721498 /* Exceptions for "flechemoica" folder in "flechemoica" target */,
+			);
 			path = flechemoica;
+			sourceTree = "<group>";
+		};
+		025940143006866000E7D35C /* docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = docs;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -22,6 +46,9 @@
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */,
+				020732632FFED28900721498 /* FirebaseAuth in Frameworks */,
+				020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -30,7 +57,9 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				025940143006866000E7D35C /* docs */,
 				000000000000000000000010 /* flechemoica */,
+				020732662FFEED2E00721498 /* Frameworks */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +70,13 @@
 				000000000000000000000120 /* flechemoica.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		020732662FFEED2E00721498 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -58,8 +94,14 @@
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* flechemoica */,
+				025940143006866000E7D35C /* docs */,
 			);
 			name = flechemoica;
+			packageProductDependencies = (
+				020732622FFED28900721498 /* FirebaseAuth */,
+				020732672FFEED2E00721498 /* FirebaseFirestore */,
+				020732702FFEFCBB00721498 /* GoogleMobileAds */,
+			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* flechemoica.app */;
 			productType = "com.apple.product-type.application";
@@ -88,7 +130,11 @@
 			);
 			mainGroup = 000000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 90;
+			packageReferences = (
+				020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				0207326F2FFEFCBB00721498 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+			);
+			preferredProjectObjectVersion = 100;
 			productRefGroup = 000000000000000000000020 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -250,6 +296,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "flechemoica" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -258,6 +305,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -266,11 +314,12 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
@@ -293,6 +342,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "flechemoica" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -301,6 +351,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -309,11 +360,12 @@
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = "";
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 26;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
@@ -353,6 +405,43 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.16.0;
+			};
+		};
+		0207326F2FFEFCBB00721498 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		020732622FFED28900721498 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		020732672FFEED2E00721498 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		020732702FFEFCBB00721498 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0207326F2FFEFCBB00721498 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 000000000000000000000000 /* Project object */;
 }

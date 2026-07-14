@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="25084" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="launch-view-controller">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="25061"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="launch-scene">
+            <objects>
+                <viewController id="launch-view-controller" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="launch-root-view">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="24" translatesAutoresizingMaskIntoConstraints="NO" id="content-stack">
+                                <rect key="frame" x="78.666666666666686" y="302.66666666666669" width="236" height="247.00000000000006"/>
+                                <subviews>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Logo" translatesAutoresizingMaskIntoConstraints="NO" id="logo-image">
+                                        <rect key="frame" x="47" y="0.0" width="142" height="142"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="142" id="logo-height"/>
+                                            <constraint firstAttribute="width" constant="142" id="logo-width"/>
+                                        </constraints>
+                                    </imageView>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Flèche-moi ça" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="app-title-label">
+                                        <rect key="frame" x="22.666666666666657" y="166" width="190.66666666666666" height="35"/>
+                                        <fontDescription key="fontDescription" name="Tahoma-Bold" family="Tahoma" pointSize="30"/>
+                                        <color key="textColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                        <nil key="highlightedColor"/>
+                                    </label>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="progress-shell">
+                                        <rect key="frame" x="0.0" y="224.99999999999994" width="236" height="22"/>
+                                        <subviews>
+                                            <stackView opaque="NO" contentMode="scaleToFill" spacing="3" translatesAutoresizingMaskIntoConstraints="NO" id="progress-segments">
+                                                <rect key="frame" x="3" y="3" width="230" height="16"/>
+                                                <subviews>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-1">
+                                                        <rect key="frame" x="0.0" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-1-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-2">
+                                                        <rect key="frame" x="12" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-2-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-3">
+                                                        <rect key="frame" x="24" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-3-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-4">
+                                                        <rect key="frame" x="36" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-4-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-5">
+                                                        <rect key="frame" x="47.999999999999986" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-5-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-6">
+                                                        <rect key="frame" x="59.999999999999986" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-6-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-7">
+                                                        <rect key="frame" x="71.999999999999986" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-7-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-8">
+                                                        <rect key="frame" x="83.999999999999986" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-8-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-9">
+                                                        <rect key="frame" x="95.999999999999986" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-9-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-10">
+                                                        <rect key="frame" x="107.99999999999999" y="0.0" width="9" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-10-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-11">
+                                                        <rect key="frame" x="119.99999999999999" y="0.0" width="9.0000000000000142" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-11-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="seg-12">
+                                                        <rect key="frame" x="132" y="0.0" width="98" height="16"/>
+                                                        <color key="backgroundColor" red="0.050980392156862744" green="0.28235294117647058" blue="0.8784313725490196" alpha="1" colorSpace="calibratedRGB"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="9" id="seg-12-w"/>
+                                                        </constraints>
+                                                    </view>
+                                                </subviews>
+                                            </stackView>
+                                        </subviews>
+                                        <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                        <constraints>
+                                            <constraint firstAttribute="height" constant="22" id="progress-height"/>
+                                            <constraint firstAttribute="width" constant="236" id="progress-width"/>
+                                            <constraint firstAttribute="bottom" secondItem="progress-segments" secondAttribute="bottom" constant="3" id="segments-bottom"/>
+                                            <constraint firstItem="progress-segments" firstAttribute="leading" secondItem="progress-shell" secondAttribute="leading" constant="3" id="segments-leading"/>
+                                            <constraint firstItem="progress-segments" firstAttribute="top" secondItem="progress-shell" secondAttribute="top" constant="3" id="segments-top"/>
+                                            <constraint firstAttribute="trailing" secondItem="progress-segments" secondAttribute="trailing" constant="3" id="segments-trailing"/>
+                                        </constraints>
+                                    </view>
+                                </subviews>
+                            </stackView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="launch-safe-area"/>
+                        <color key="backgroundColor" white="0.0" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                        <constraints>
+                            <constraint firstItem="content-stack" firstAttribute="centerX" secondItem="launch-root-view" secondAttribute="centerX" id="stack-center-x"/>
+                            <constraint firstItem="content-stack" firstAttribute="centerY" secondItem="launch-root-view" secondAttribute="centerY" id="stack-center-y"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="first-responder" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="0.0" y="0.0"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="Logo" width="160" height="149"/>
+    </resources>
+</document>
