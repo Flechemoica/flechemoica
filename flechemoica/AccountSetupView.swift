@@ -132,6 +132,7 @@ struct AccountSetupView: View {
                 .padding(.bottom, 4)
             }
         }
+        .background(KeyboardPreloader().frame(width: 0, height: 0))
     }
 
     private var submittingButtonTitle: String {
@@ -325,7 +326,7 @@ struct AccountSetupView: View {
 
 private struct AccountLegalFooter: View {
     private let legalNoticeURL = URL(string: "https://flechemoica.fr/mentions-legales.html")
-    private let privacyURL = URL(string: "https://flechemoica.fr/politique-confidentialite.html")
+    private let privacyURL = URL(string: "https://flechemoica.fr/privacy.html")
 
     @State private var presentedPage: LegalPage?
 
@@ -348,7 +349,7 @@ private struct AccountLegalFooter: View {
                     Button {
                         presentedPage = LegalPage(url: privacyURL)
                     } label: {
-                        Text("Politique de confidentialité")
+                        Text("Confidentialité")
                             .font(.xpTahoma(size: 13))
                     }
                     .buttonStyle(.plain)
@@ -381,10 +382,32 @@ private struct SafariView: UIViewControllerRepresentable {
     let url: URL
 
     func makeUIViewController(context: Context) -> SFSafariViewController {
-        SFSafariViewController(url: url)
+        let configuration = SFSafariViewController.Configuration()
+        configuration.entersReaderIfAvailable = false
+
+        return SFSafariViewController(url: url, configuration: configuration)
     }
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+private struct KeyboardPreloader: UIViewRepresentable {
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.isHidden = true
+        textField.alpha = 0
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            UIView.performWithoutAnimation {
+                textField.becomeFirstResponder()
+                textField.resignFirstResponder()
+            }
+        }
+
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {}
 }
 
 private struct XPMenuBar: View {

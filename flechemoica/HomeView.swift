@@ -2147,7 +2147,7 @@ private struct ProfileSettingsContent: View {
             case .password: return "Changer le mot de passe"
             case .deleteAccount: return "Supprimer le compte"
             case .legal: return "Mentions légales"
-            case .privacyPolicy: return "Politique de confidentialité"
+            case .privacyPolicy: return "Confidentialité"
             }
         }
     }
@@ -2279,7 +2279,7 @@ private struct ProfileSettingsContent: View {
 
                         SettingsSectionTitle("Confidentialité")
                             .padding(.top, 4)
-                        SettingsMenuButton(title: "Politique de confidentialité") {
+                        SettingsMenuButton(title: "Confidentialité") {
                             activePanel = .privacyPolicy
                         }
                         SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
