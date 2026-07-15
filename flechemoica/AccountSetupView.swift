@@ -1,5 +1,6 @@
 import FirebaseAuth
 import FirebaseFirestore
+import SafariServices
 import SwiftUI
 import UIKit
 
@@ -326,23 +327,31 @@ private struct AccountLegalFooter: View {
     private let legalNoticeURL = URL(string: "https://flechemoica.fr/mentions-legales.html")
     private let privacyURL = URL(string: "https://flechemoica.fr/politique-confidentialite.html")
 
+    @State private var presentedPage: LegalPage?
+
     var body: some View {
         VStack(spacing: 4) {
             Text("© 2026 Flèche-moi ça")
 
             HStack(spacing: 14) {
                 if let legalNoticeURL {
-                    Link(destination: legalNoticeURL) {
+                    Button {
+                        presentedPage = LegalPage(url: legalNoticeURL)
+                    } label: {
                         Text("Mentions légales")
                             .font(.xpTahoma(size: 13))
                     }
+                    .buttonStyle(.plain)
                 }
 
                 if let privacyURL {
-                    Link(destination: privacyURL) {
+                    Button {
+                        presentedPage = LegalPage(url: privacyURL)
+                    } label: {
                         Text("Politique de confidentialité")
                             .font(.xpTahoma(size: 13))
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -357,7 +366,25 @@ private struct AccountLegalFooter: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Color(red: 0.79, green: 0.77, blue: 0.69)).frame(height: 1)
         }
+        .sheet(item: $presentedPage) { page in
+            SafariView(url: page.url)
+        }
     }
+}
+
+private struct LegalPage: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 private struct XPMenuBar: View {
