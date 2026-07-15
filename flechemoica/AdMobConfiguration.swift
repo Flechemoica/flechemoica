@@ -8,7 +8,7 @@ enum AdMobConfiguration {
     private static var appStoreEnvironmentUsesTestAds = false
 
     static var usesTestAds: Bool {
-        #if DEBUGdans mon do
+        #if DEBUG
         return true
         #else
         return appStoreEnvironmentUsesTestAds

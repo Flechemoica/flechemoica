@@ -196,6 +196,18 @@ body {
   min-width: 0;
 }
 
+.legal-container {
+  min-height: 0;
+  align-items: flex-start;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 0 16px;
+}
+
+.legal-card {
+  width: 100%;
+}
+
 .card {
   padding: 18px;
   text-align: center;

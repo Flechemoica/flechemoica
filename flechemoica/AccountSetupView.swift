@@ -122,6 +122,8 @@ struct AccountSetupView: View {
                                     .frame(height: 8)
                             }
                         }
+
+                        AccountLegalFooter()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -316,6 +318,39 @@ struct AccountSetupView: View {
             return "Mot de passe trop faible."
         default:
             return nsError.localizedDescription
+        }
+    }
+}
+
+private struct AccountLegalFooter: View {
+    private let legalNoticeURL = URL(string: "https://flechemoica.fr/mentions-legales.html")
+    private let privacyURL = URL(string: "https://flechemoica.fr/politique-confidentialite.html")
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("© 2026 Flèche-moi ça")
+
+            HStack(spacing: 14) {
+                if let legalNoticeURL {
+                    Link("Mentions légales", destination: legalNoticeURL)
+                }
+
+                if let privacyURL {
+                    Link("Politique de confidentialité", destination: privacyURL)
+                }
+            }
+        }
+        .font(.xpTahoma(size: 11))
+        .foregroundStyle(Color.black.opacity(0.62))
+        .multilineTextAlignment(.center)
+        .lineLimit(1)
+        .minimumScaleFactor(0.72)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.xpChrome)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color(red: 0.79, green: 0.77, blue: 0.69)).frame(height: 1)
         }
     }
 }
