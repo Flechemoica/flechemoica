@@ -1,8 +1,8 @@
 import FirebaseAuth
 import FirebaseFirestore
-import SafariServices
 import SwiftUI
 import UIKit
+import WebKit
 
 struct AccountSetupView: View {
     enum AuthMode {
@@ -132,7 +132,6 @@ struct AccountSetupView: View {
                 .padding(.bottom, 4)
             }
         }
-        .background(KeyboardPreloader().frame(width: 0, height: 0))
     }
 
     private var submittingButtonTitle: String {
@@ -337,7 +336,7 @@ private struct AccountLegalFooter: View {
             HStack(spacing: 14) {
                 if let legalNoticeURL {
                     Button {
-                        presentedPage = LegalPage(url: legalNoticeURL)
+                        presentedPage = LegalPage(title: "Mentions légales", url: legalNoticeURL)
                     } label: {
                         Text("Mentions légales")
                             .font(.xpTahoma(size: 13))
@@ -347,7 +346,7 @@ private struct AccountLegalFooter: View {
 
                 if let privacyURL {
                     Button {
-                        presentedPage = LegalPage(url: privacyURL)
+                        presentedPage = LegalPage(title: "Confidentialité", url: privacyURL)
                     } label: {
                         Text("Confidentialité")
                             .font(.xpTahoma(size: 13))
@@ -368,46 +367,49 @@ private struct AccountLegalFooter: View {
             Rectangle().fill(Color(red: 0.79, green: 0.77, blue: 0.69)).frame(height: 1)
         }
         .sheet(item: $presentedPage) { page in
-            SafariView(url: page.url)
+            InternalWebSheet(page: page)
         }
     }
 }
 
 private struct LegalPage: Identifiable {
     let id = UUID()
+    let title: String
     let url: URL
 }
 
-private struct SafariView: UIViewControllerRepresentable {
-    let url: URL
+private struct InternalWebSheet: View {
+    @Environment(\.dismiss) private var dismiss
 
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let configuration = SFSafariViewController.Configuration()
-        configuration.entersReaderIfAvailable = false
+    let page: LegalPage
 
-        return SFSafariViewController(url: url, configuration: configuration)
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
-}
-
-private struct KeyboardPreloader: UIViewRepresentable {
-    func makeUIView(context: Context) -> UITextField {
-        let textField = UITextField(frame: .zero)
-        textField.isHidden = true
-        textField.alpha = 0
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            UIView.performWithoutAnimation {
-                textField.becomeFirstResponder()
-                textField.resignFirstResponder()
-            }
+    var body: some View {
+        NavigationView {
+            WebView(url: page.url)
+                .navigationTitle(page.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Fermer") {
+                            dismiss()
+                        }
+                    }
+                }
         }
+    }
+}
 
-        return textField
+private struct WebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero)
+        webView.load(URLRequest(url: url))
+
+        return webView
     }
 
-    func updateUIView(_ uiView: UITextField, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
 private struct XPMenuBar: View {
