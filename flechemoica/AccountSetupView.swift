@@ -327,26 +327,27 @@ private struct AccountLegalFooter: View {
     private let privacyURL = URL(string: "https://flechemoica.fr/politique-confidentialite.html")
 
     var body: some View {
-        VStack(spacing: 4) {
+        HStack(spacing: 10) {
             Text("© 2026 Flèche-moi ça")
+                .layoutPriority(1)
 
-            HStack(spacing: 14) {
-                if let legalNoticeURL {
-                    Link("Mentions légales", destination: legalNoticeURL)
-                }
+            Spacer(minLength: 4)
 
-                if let privacyURL {
-                    Link("Politique de confidentialité", destination: privacyURL)
-                }
+            if let legalNoticeURL {
+                Link("Mentions légales", destination: legalNoticeURL)
+            }
+
+            if let privacyURL {
+                Link("Politique de confidentialité", destination: privacyURL)
             }
         }
-        .font(.xpTahoma(size: 11))
+        .font(.xpTahoma(size: 13))
         .foregroundStyle(Color.black.opacity(0.62))
-        .multilineTextAlignment(.center)
+        .multilineTextAlignment(.leading)
         .lineLimit(1)
-        .minimumScaleFactor(0.72)
+        .minimumScaleFactor(0.68)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.xpChrome)
         .overlay(alignment: .top) {
