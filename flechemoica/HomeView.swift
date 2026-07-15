@@ -4,6 +4,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import SwiftUI
 import UIKit
+import WebKit
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -141,7 +142,8 @@ struct HomeView: View {
                             isEditor: publicProfileIsEditor,
                             completedGridTitles: publicProfileCompletedGridTitles,
                             backAction: closePublicProfile,
-                            settingsAction: canOpenPublicProfileSettings ? { isShowingSettings = true } : nil
+                            settingsAction: canOpenPublicProfileSettings ? { isShowingSettings = true } : nil,
+                            contactAction: openSupportMail
                         )
                     } else if let selectedGameGrid {
                         GridGameContent(
@@ -406,6 +408,51 @@ struct HomeView: View {
         emailOverride = changedUser.email
         photoURLOverride = changedUser.photoURL
         onUserChanged(changedUser)
+    }
+
+    private var appVersionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let visibleVersion = (version?.isEmpty == false) ? version! : "1.0"
+
+        if let build, !build.isEmpty, build != visibleVersion {
+            return "Version \(visibleVersion) (\(build))"
+        }
+
+        return "Version \(visibleVersion)"
+    }
+
+    private func openSupportMail() {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = "contact@flechemoica.fr"
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "Support Flèche-moi ça"),
+            URLQueryItem(name: "body", value: supportMailBody)
+        ]
+
+        guard let url = components.url else { return }
+        UIApplication.shared.open(url)
+    }
+
+    private var supportMailBody: String {
+        """
+        Bonjour,
+
+        Décris ton problème ici :
+
+
+        ---
+        Infos utilisateur
+        UID : \(user.uid)
+        Pseudo : \(displayName)
+        E-mail : \(emailAddress ?? "Non disponible")
+
+        Infos app
+        \(appVersionText)
+        iOS : \(UIDevice.current.systemVersion)
+        Appareil : \(UIDevice.current.model)
+        """
     }
 
     private func handleSignedOut() {
@@ -1981,6 +2028,7 @@ private struct PublicProfileContent: View {
     let completedGridTitles: [String]
     let backAction: () -> Void
     var settingsAction: (() -> Void)? = nil
+    var contactAction: () -> Void
 
 
     var body: some View {
@@ -2008,16 +2056,29 @@ private struct PublicProfileContent: View {
                 .padding(18)
 
                 if let settingsAction {
-                    Button(action: settingsAction) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.black.opacity(0.78))
-                            .frame(width: 34, height: 34)
-                            .background(Color.xpChrome)
-                            .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+                    VStack(spacing: 8) {
+                        Button(action: settingsAction) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.black.opacity(0.78))
+                                .frame(width: 34, height: 34)
+                                .background(Color.xpChrome)
+                                .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reglages du profil")
+
+                        Button(action: contactAction) {
+                            Text("?")
+                                .font(.xpTahoma(size: 18, weight: .bold))
+                                .foregroundStyle(.black.opacity(0.78))
+                                .frame(width: 34, height: 34)
+                                .background(Color.xpChrome)
+                                .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Contacter le support")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Reglages du profil")
                     .padding(8)
                 }
             }
@@ -2126,8 +2187,6 @@ private struct ProfileSettingsContent: View {
         case avatar
         case password
         case deleteAccount
-        case legal
-        case privacyPolicy
 
         var id: String {
             switch self {
@@ -2135,8 +2194,6 @@ private struct ProfileSettingsContent: View {
             case .avatar: return "avatar"
             case .password: return "password"
             case .deleteAccount: return "deleteAccount"
-            case .legal: return "legal"
-            case .privacyPolicy: return "privacyPolicy"
             }
         }
 
@@ -2146,8 +2203,6 @@ private struct ProfileSettingsContent: View {
             case .avatar: return "Changer d'avatar"
             case .password: return "Changer le mot de passe"
             case .deleteAccount: return "Supprimer le compte"
-            case .legal: return "Mentions légales"
-            case .privacyPolicy: return "Confidentialité"
             }
         }
     }
@@ -2276,26 +2331,17 @@ private struct ProfileSettingsContent: View {
                         SettingsMenuButton(title: "Changer le mot de passe") {
                             activePanel = .password
                         }
-
-                        SettingsSectionTitle("Confidentialité")
-                            .padding(.top, 4)
-                        SettingsMenuButton(title: "Confidentialité") {
-                            activePanel = .privacyPolicy
-                        }
-                        SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
-                            activePanel = .deleteAccount
-                        }
-
-                        SettingsSectionTitle("Informations")
-                            .padding(.top, 4)
-                        SettingsMenuButton(title: "Mentions légales") {
-                            activePanel = .legal
-                        }
                         Text(appVersionText)
                             .font(.custom("Tahoma", size: 12))
                             .foregroundStyle(.black.opacity(0.55))
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 2)
+
+                        SettingsSectionTitle("Confidentialité")
+                            .padding(.top, 4)
+                        SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
+                            activePanel = .deleteAccount
+                        }
 
                         if !statusText.isEmpty {
                             Text(statusText)
@@ -2314,6 +2360,8 @@ private struct ProfileSettingsContent: View {
                 }
                 .buttonStyle(XPButtonStyle(foregroundColor: .red))
                 .disabled(isSubmitting)
+
+                SettingsLegalFooter()
             }
             .padding(14)
 
@@ -2379,23 +2427,6 @@ private struct ProfileSettingsContent: View {
                 .buttonStyle(XPButtonStyle(foregroundColor: .red))
                 .disabled(isSubmitting)
             }
-        case .legal:
-            VStack(alignment: .leading, spacing: 12) {
-                SettingsTextPanel(lines: [
-                    "Éditeur : Flèche-moi ça.",
-                    "Contact : contact@flechemoica.fr.",
-                    "Les informations légales complètes sont aussi disponibles sur flechemoica.fr."
-                ])
-                Button("Nous contacter", action: openContactMail)
-                    .buttonStyle(XPButtonStyle())
-                    .frame(maxWidth: .infinity)
-            }
-        case .privacyPolicy:
-            SettingsTextPanel(lines: [
-                "L'application utilise Firebase pour l'authentification, les profils, les grilles et la sauvegarde des grilles terminées.",
-                "AdMob peut être utilisé pour afficher des annonces, dont les annonces avec récompense.",
-                "Tu peux nous contacter par e-mail pour toute question de confidentialité."
-            ])
         }
     }
 
@@ -2407,11 +2438,6 @@ private struct ProfileSettingsContent: View {
         .opacity(canSave ? 1 : 0.55)
         .disabled(!canSave)
         .frame(maxWidth: .infinity)
-    }
-
-    private func openContactMail() {
-        guard let url = URL(string: "mailto:contact@flechemoica.fr") else { return }
-        UIApplication.shared.open(url)
     }
 
     private func saveTapped() {
@@ -2785,6 +2811,95 @@ private struct ProfileSecureField: View {
         .textContentType(textContentType)
         .profileInputStyle()
     }
+}
+
+private struct SettingsLegalFooter: View {
+    private let legalNoticeURL = URL(string: "https://flechemoica.fr/mentions-legales.html")
+    private let privacyURL = URL(string: "https://flechemoica.fr/privacy.html")
+
+    @State private var presentedPage: SettingsLegalPage?
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("© 2026 Flèche-moi ça")
+
+            HStack(spacing: 14) {
+                if let legalNoticeURL {
+                    Button {
+                        presentedPage = SettingsLegalPage(title: "Mentions légales", url: legalNoticeURL)
+                    } label: {
+                        Text("Mentions légales")
+                            .font(.xpTahoma(size: 13))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if let privacyURL {
+                    Button {
+                        presentedPage = SettingsLegalPage(title: "Confidentialité", url: privacyURL)
+                    } label: {
+                        Text("Confidentialité")
+                            .font(.xpTahoma(size: 13))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .font(.xpTahoma(size: 13))
+        .foregroundStyle(Color.black.opacity(0.62))
+        .multilineTextAlignment(.center)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.xpChrome)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color(red: 0.79, green: 0.77, blue: 0.69)).frame(height: 1)
+        }
+        .sheet(item: $presentedPage) { page in
+            SettingsInternalWebSheet(page: page)
+        }
+    }
+}
+
+private struct SettingsLegalPage: Identifiable {
+    let id = UUID()
+    let title: String
+    let url: URL
+}
+
+private struct SettingsInternalWebSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let page: SettingsLegalPage
+
+    var body: some View {
+        NavigationView {
+            SettingsWebView(url: page.url)
+                .navigationTitle(page.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Fermer") {
+                            dismiss()
+                        }
+                    }
+                }
+        }
+    }
+}
+
+private struct SettingsWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero)
+        webView.load(URLRequest(url: url))
+
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
 private struct EditorBadge: View {
