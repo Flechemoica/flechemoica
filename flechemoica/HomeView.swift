@@ -1,21 +1,37 @@
+import Combine
+import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import SwiftUI
 import UIKit
 
-struct HomeView: View {
-    fileprivate static let featuredProfileUID = "KiXhyFMwBjenEW91pEpQXKjZAi52"
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
 
+struct HomeView: View {
     let user: User
     var onUserChanged: (User) -> Void = { _ in }
     var onSignedOut: () -> Void = {}
 
     @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var rewardedGridAccessAd = RewardedGridAccessAd()
     @State private var isEditor = false
     @State private var isShowingPublicProfile = false
-    @State private var isShowingFeaturedProfile = false
     @State private var isShowingSettings = false
-    @State private var featuredProfile = FeaturedProfile.placeholder
+    @State private var publishedGrids: [PublishedGrid] = []
+    @State private var selectedGridIndex = 0
+    @State private var selectedGameGrid: PublishedGrid?
+    @State private var publicProfiles: [PublicProfile] = []
+    @State private var selectedPublicProfile: PublicProfile?
+    @State private var isLoadingPublicProfiles = false
+    @State private var profileListMessage: String?
+    @State private var rewardUnlockedGridIDs: Set<String> = []
+    @State private var completedGridTitles: [String] = []
+    @State private var gridAccessMessage: String?
+    @State private var isLoadingPublishedGrids = false
+    @State private var gridLoadingMessage: String?
+    @State private var wizzShakeTrigger = 0
     @State private var displayNameOverride: String?
     @State private var emailOverride: String?
     @State private var photoURLOverride: URL?
@@ -45,11 +61,11 @@ struct HomeView: View {
             return "Reglages.exe"
         }
 
-        if isShowingFeaturedProfile {
-            return "\(featuredProfile.displayName).exe"
+        if let selectedGameGrid {
+            return "\(selectedGameGrid.title).exe"
         }
 
-        return isShowingPublicProfile ? "\(displayName).exe" : "Accueil.exe"
+        return isShowingPublicProfile ? "\(publicProfileDisplayName).exe" : "Accueil.exe"
     }
 
     private var avatarName: String {
@@ -60,6 +76,46 @@ struct HomeView: View {
         }
 
         return "08"
+    }
+
+    private var publicProfileDisplayName: String {
+        selectedPublicProfile?.displayName ?? displayName
+    }
+
+    private var publicProfileAvatarName: String {
+        selectedPublicProfile?.avatarName ?? avatarName
+    }
+
+    private var publicProfileIsEditor: Bool {
+        selectedPublicProfile?.isEditor ?? isEditor
+    }
+
+    private var publicProfileCompletedGridTitles: [String] {
+        selectedPublicProfile?.completedGridTitles ?? completedGridTitles
+    }
+
+    private var canOpenPublicProfileSettings: Bool {
+        selectedPublicProfile == nil || selectedPublicProfile?.uid == user.uid
+    }
+
+    private static func isEditorProfile(_ data: [String: Any]?) -> Bool {
+        let role = (data?["role"] as? String)?.lowercased()
+        let status = (data?["status"] as? String)?.lowercased()
+        return role == "editor" || status == "editor"
+    }
+
+    fileprivate static func completedGridTitles(from data: [String: Any]?) -> [String] {
+        if let titles = data?["completedGridTitles"] as? [String] {
+            return titles.sorted()
+        }
+
+        guard let completedGrids = data?["completedGrids"] as? [String: Any] else {
+            return []
+        }
+
+        return completedGrids.values
+            .compactMap { ($0 as? [String: Any])?["title"] as? String }
+            .sorted()
     }
 
     var body: some View {
@@ -80,42 +136,56 @@ struct HomeView: View {
                         )
                     } else if isShowingPublicProfile {
                         PublicProfileContent(
-                            displayName: displayName,
-                            avatarName: avatarName,
-                            isEditor: isEditor,
-                            backAction: { isShowingPublicProfile = false },
-                            settingsAction: { isShowingSettings = true }
+                            displayName: publicProfileDisplayName,
+                            avatarName: publicProfileAvatarName,
+                            isEditor: publicProfileIsEditor,
+                            completedGridTitles: publicProfileCompletedGridTitles,
+                            backAction: closePublicProfile,
+                            settingsAction: canOpenPublicProfileSettings ? { isShowingSettings = true } : nil
                         )
-                    } else if isShowingFeaturedProfile {
-                        PublicProfileContent(
-                            displayName: featuredProfile.displayName,
-                            avatarName: featuredProfile.avatarName,
-                            isEditor: featuredProfile.isEditor,
-                            backAction: { isShowingFeaturedProfile = false }
+                    } else if let selectedGameGrid {
+                        GridGameContent(
+                            grid: selectedGameGrid,
+                            userID: user.uid,
+                            backAction: { self.selectedGameGrid = nil },
+                            completionRecorded: recordCompletedGridTitle
                         )
                     } else {
                         HomeContent(
                             displayName: displayName,
                             avatarName: avatarName,
                             isEditor: isEditor,
-                            featuredProfile: featuredProfile,
-                            profileAction: { isShowingPublicProfile = true },
-                            featuredProfileAction: { isShowingFeaturedProfile = true }
+                            selectedGrid: selectedPublishedGrid,
+                            selectedGridIndex: selectedGridIndex,
+                            gridCount: publishedGrids.count,
+                            isLoadingPublishedGrids: isLoadingPublishedGrids,
+                            gridLoadingMessage: gridLoadingMessage,
+                            gridAccessMessage: gridAccessMessage ?? rewardedGridAccessAd.message,
+                            isLoadingRewardedAd: rewardedGridAccessAd.isLoading,
+                            requiresRewardedAd: selectedGridRequiresRewardedAd,
+                            selectedGridIsCompleted: selectedGridIsCompleted,
+                            profileAction: openOwnProfile,
+                            previousGridAction: showPreviousGrid,
+                            nextGridAction: showNextGrid,
+                            playGridAction: playSelectedGrid,
+                            wizzAction: triggerWizzShake
                         )
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .modifier(WizzShakeEffect(trigger: wizzShakeTrigger))
                 .padding(.horizontal, 3)
                 .padding(.bottom, 4)
             }
         }
         .task(id: user.uid) {
             await refreshAuthenticatedProfile()
-            await loadFeaturedProfile()
+            await loadPublishedGrids()
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await refreshAuthenticatedProfile()
+            await loadPublishedGrids()
         }
     }
 
@@ -132,18 +202,30 @@ struct HomeView: View {
 
     private func loadProfileMetadataAndSyncEmail(for refreshedUser: User) async {
         do {
-            let document = Firestore.firestore()
+            let database = Firestore.firestore()
+            let document = database
                 .collection("users")
                 .document(refreshedUser.uid)
             let snapshot = try await document.getDocument()
-            let data = snapshot.data()
-            let role = data?["role"] as? String
-            isEditor = role == "editor"
+            let userData = snapshot.data()
+            let publicSnapshot = try? await database
+                .collection("publicProfiles")
+                .document(refreshedUser.uid)
+                .getDocument()
+            let publicData = publicSnapshot?.data()
+            isEditor = Self.isEditorProfile(userData) || Self.isEditorProfile(publicData)
+            completedGridTitles = Self.completedGridTitles(from: publicData).isEmpty
+                ? Self.completedGridTitles(from: userData)
+                : Self.completedGridTitles(from: publicData)
+
+            if let unlockedGridIDs = userData?["unlockedGridIDs"] as? [String] {
+                rewardUnlockedGridIDs = Set(unlockedGridIDs)
+            }
 
             await syncAuthenticatedEmailIfNeeded(
                 refreshedUser: refreshedUser,
                 document: document,
-                storedEmail: data?["email"] as? String
+                storedEmail: userData?["email"] as? String
             )
         } catch {
             return
@@ -171,28 +253,151 @@ struct HomeView: View {
         }
     }
 
-    private func loadFeaturedProfile() async {
-        do {
-            let database = Firestore.firestore()
-            let publicSnapshot = try await database
-                .collection("publicProfiles")
-                .document(Self.featuredProfileUID)
-                .getDocument()
-            let publicData = publicSnapshot.data()
-            let userSnapshot = try? await database
-                .collection("users")
-                .document(Self.featuredProfileUID)
-                .getDocument()
-            let userData = userSnapshot?.data()
+    private var selectedPublishedGrid: PublishedGrid? {
+        guard publishedGrids.indices.contains(selectedGridIndex) else {
+            return nil
+        }
 
-            featuredProfile = FeaturedProfile(
-                uid: Self.featuredProfileUID,
-                displayName: (publicData?["pseudo"] as? String) ?? "Profil",
-                avatarName: ((publicData?["avatarID"] as? String) ?? "08.png").replacingOccurrences(of: ".png", with: ""),
-                isEditor: (userData?["role"] as? String) == "editor"
-            )
+        return publishedGrids[selectedGridIndex]
+    }
+
+    private var selectedGridRequiresRewardedAd: Bool {
+        guard let selectedPublishedGrid else { return false }
+        return selectedGridIndex > 0
+            && !isGridCompleted(selectedPublishedGrid.id)
+            && !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id)
+    }
+
+    private var selectedGridIsCompleted: Bool {
+        guard let selectedPublishedGrid else { return false }
+        return isGridCompleted(selectedPublishedGrid.id)
+    }
+
+    private func isGridCompleted(_ id: String) -> Bool {
+        UserDefaults.standard.bool(forKey: "gridCompleted.\(id)")
+    }
+
+    private func loadPublishedGrids() async {
+        isLoadingPublishedGrids = true
+        gridLoadingMessage = nil
+
+        do {
+            let snapshot = try await Firestore.firestore()
+                .collection("grids")
+                .whereField("status", isEqualTo: "published")
+                .limit(to: 50)
+                .getDocuments()
+
+            publishedGrids = snapshot.documents
+                .compactMap(PublishedGrid.init(document:))
+                .sorted { $0.releaseAt > $1.releaseAt }
+            selectedGridIndex = publishedGrids.isEmpty ? 0 : min(selectedGridIndex, publishedGrids.count - 1)
+            gridLoadingMessage = publishedGrids.isEmpty ? "Aucune grille publiee" : nil
         } catch {
-            featuredProfile = .placeholder
+            let nsError = error as NSError
+            gridLoadingMessage = "Erreur Firebase: \(nsError.localizedDescription)"
+        }
+
+        isLoadingPublishedGrids = false
+    }
+
+    private func showPreviousGrid() {
+        guard selectedGridIndex + 1 < publishedGrids.count else { return }
+        selectedGridIndex += 1
+    }
+
+    private func showNextGrid() {
+        guard selectedGridIndex > 0 else { return }
+        selectedGridIndex -= 1
+    }
+
+    private func playSelectedGrid() {
+        guard let selectedPublishedGrid else { return }
+        gridAccessMessage = nil
+
+        guard selectedGridIndex > 0, !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id) else {
+            selectedGameGrid = selectedPublishedGrid
+            return
+        }
+
+        Task {
+            await rewardedGridAccessAd.showAd(
+                adUnitID: "ca-app-pub-1003964550278910/8860825770",
+                customData: "grid_\(selectedPublishedGrid.id)"
+            ) { earnedReward in
+                guard earnedReward else {
+                    gridAccessMessage = "Regarde la pub jusqu'au bout pour debloquer cette grille."
+                    return
+                }
+
+                rewardUnlockedGridIDs.insert(selectedPublishedGrid.id)
+                persistUnlockedGrid(id: selectedPublishedGrid.id)
+                selectedGameGrid = selectedPublishedGrid
+            }
+        }
+    }
+
+    private func persistUnlockedGrid(id: String) {
+        Task {
+            do {
+                try await Firestore.firestore()
+                    .collection("users")
+                    .document(user.uid)
+                    .setData([
+                        "unlockedGridIDs": FieldValue.arrayUnion([id]),
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], merge: true)
+            } catch {
+                gridAccessMessage = "Grille debloquee sur cet appareil, mais sauvegarde Firebase impossible."
+            }
+        }
+    }
+
+    private func loadPublicProfiles() async {
+        isLoadingPublicProfiles = true
+        profileListMessage = nil
+
+        do {
+            let snapshot = try await Firestore.firestore()
+                .collection("publicProfiles")
+                .order(by: "pseudoKey")
+                .limit(to: 50)
+                .getDocuments()
+
+            publicProfiles = snapshot.documents.compactMap(PublicProfile.init(document:))
+            profileListMessage = publicProfiles.isEmpty ? "Aucun profil public" : nil
+        } catch {
+            let nsError = error as NSError
+            profileListMessage = "Erreur Firebase: \(nsError.localizedDescription)"
+        }
+
+        isLoadingPublicProfiles = false
+    }
+
+    private func openOwnProfile() {
+        selectedPublicProfile = nil
+        isShowingPublicProfile = true
+    }
+
+    private func openPublicProfile(_ profile: PublicProfile) {
+        selectedPublicProfile = profile
+        isShowingPublicProfile = true
+    }
+
+    private func closePublicProfile() {
+        selectedPublicProfile = nil
+        isShowingPublicProfile = false
+    }
+
+    private func recordCompletedGridTitle(_ title: String) {
+        guard !completedGridTitles.contains(title) else { return }
+        completedGridTitles.append(title)
+        completedGridTitles.sort()
+    }
+
+    private func triggerWizzShake() {
+        withAnimation(.linear(duration: 0.58)) {
+            wizzShakeTrigger += 1
         }
     }
 
@@ -208,27 +413,370 @@ struct HomeView: View {
     }
 }
 
-private struct FeaturedProfile {
+@MainActor
+private final class RewardedGridAccessAd: NSObject, ObservableObject {
+    @Published private(set) var isLoading = false
+    @Published private(set) var message: String?
+
+    #if canImport(GoogleMobileAds)
+    private var rewardedAd: RewardedAd?
+    private var pendingRewardCompletion: ((Bool) -> Void)?
+    private var didEarnReward = false
+
+    private var effectiveAdUnitID: String {
+        AdMobConfiguration.rewardedAdUnitID(productionID: productionAdUnitID ?? "")
+    }
+
+    private var productionAdUnitID: String?
+    #endif
+
+    func showAd(
+        adUnitID: String,
+        customData: String,
+        rewarded: @escaping (Bool) -> Void
+    ) async {
+        #if canImport(GoogleMobileAds)
+        productionAdUnitID = adUnitID
+        message = nil
+
+        do {
+            let ad = try await loadAdIfNeeded(customData: customData)
+            guard let rootViewController = UIApplication.shared.activeRootViewController else {
+                message = "Impossible d'ouvrir la pub pour le moment."
+                rewarded(false)
+                return
+            }
+
+            didEarnReward = false
+            pendingRewardCompletion = rewarded
+            ad.present(from: rootViewController) { [weak self] in
+                Task { @MainActor in
+                    self?.didEarnReward = true
+                }
+            }
+        } catch {
+            message = "Pub indisponible: \(error.localizedDescription)"
+            rewarded(false)
+        }
+        #else
+        message = "Le SDK GoogleMobileAds n'est pas lie a cette cible."
+        rewarded(false)
+        #endif
+    }
+
+    #if canImport(GoogleMobileAds)
+    private func loadAdIfNeeded(customData: String) async throws -> RewardedAd {
+        if let rewardedAd {
+            return rewardedAd
+        }
+
+        return try await loadAd(customData: customData)
+    }
+
+    @discardableResult
+    private func loadAd(customData: String) async throws -> RewardedAd {
+        isLoading = true
+        defer { isLoading = false }
+
+        await AdMobConfiguration.refreshTestAdsStatus()
+        let ad = try await RewardedAd.load(with: effectiveAdUnitID, request: Request())
+        let options = ServerSideVerificationOptions()
+        options.customRewardText = customData
+        ad.serverSideVerificationOptions = options
+        ad.fullScreenContentDelegate = self
+        rewardedAd = ad
+        return ad
+    }
+
+    private func finishRewardFlow(earnedReward: Bool) {
+        rewardedAd = nil
+        let completion = pendingRewardCompletion
+        pendingRewardCompletion = nil
+        completion?(earnedReward)
+        Task { try? await loadAd(customData: "preload") }
+    }
+    #endif
+}
+
+#if canImport(GoogleMobileAds)
+extension RewardedGridAccessAd: FullScreenContentDelegate {
+    nonisolated func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
+        Task { @MainActor in
+            finishRewardFlow(earnedReward: didEarnReward)
+        }
+    }
+
+    nonisolated func ad(
+        _ ad: FullScreenPresentingAd,
+        didFailToPresentFullScreenContentWithError error: Error
+    ) {
+        Task { @MainActor in
+            message = "Pub indisponible: \(error.localizedDescription)"
+            finishRewardFlow(earnedReward: false)
+        }
+    }
+}
+#endif
+
+private extension UIApplication {
+    var activeRootViewController: UIViewController? {
+        connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .rootViewController
+    }
+}
+
+private struct PublishedGrid: Identifiable {
+    let id: String
+    let title: String
+    let releaseAt: Date
+    let crosswordGrid: CrosswordGrid?
+
+    init?(document: QueryDocumentSnapshot) {
+        let data = document.data()
+
+        guard let title = data["title"] as? String,
+              let releaseTimestamp = data["releaseAt"] as? Timestamp else {
+            return nil
+        }
+
+        self.id = document.documentID
+        self.title = title
+        self.releaseAt = releaseTimestamp.dateValue()
+        self.crosswordGrid = CrosswordGrid(firestoreData: data, fallbackTitle: title)
+    }
+
+    var formattedReleaseDate: String {
+        Self.releaseDateFormatter.string(from: releaseAt)
+    }
+
+    private static let releaseDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.timeZone = TimeZone(identifier: "Europe/Paris")
+        formatter.dateStyle = .long
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+private struct CrosswordGrid {
+    static let rowCount = 15
+    static let columnCount = 10
+
+    let name: String
+    let placedWords: [CrosswordWord]
+    let blackCells: Set<GridCoordinate>
+
+    init?(firestoreData: [String: Any], fallbackTitle: String) {
+        let payload: [String: Any]?
+
+        if let gridMap = firestoreData["grid"] as? [String: Any] {
+            payload = gridMap
+        } else if let gridJSON = firestoreData["grid"] as? String,
+                  let data = gridJSON.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            payload = object
+        } else if firestoreData["placedWords"] != nil {
+            payload = firestoreData
+        } else {
+            payload = nil
+        }
+
+        guard let payload,
+              let wordsPayload = payload["placedWords"] as? [[String: Any]] else {
+            return nil
+        }
+
+        self.name = (payload["name"] as? String) ?? fallbackTitle
+        self.placedWords = wordsPayload.compactMap(CrosswordWord.init(payload:))
+        let blackPayload = payload["blackCells"] as? [[String: Any]] ?? []
+        self.blackCells = Set(blackPayload.compactMap(GridCoordinate.init(payload:)))
+    }
+
+    var definitionCells: [GridCoordinate: [CrosswordWord]] {
+        Dictionary(grouping: placedWords, by: \.definitionCell)
+            .mapValues { words in
+                words.sorted { lhs, rhs in
+                    lhs.definitionSlotPriority < rhs.definitionSlotPriority
+                }
+            }
+    }
+
+    var letterCellIDs: Set<GridCoordinate> {
+        Set(placedWords.flatMap(\.letterCoordinates))
+    }
+
+    var solutionLetters: [GridCoordinate: String] {
+        var lettersByCoordinate: [GridCoordinate: String] = [:]
+        for word in placedWords {
+            for (index, coordinate) in word.letterCoordinates.enumerated() where word.letters.indices.contains(index) {
+                lettersByCoordinate[coordinate] = word.letters[index]
+            }
+        }
+        return lettersByCoordinate
+    }
+
+    func correctLetter(at coordinate: GridCoordinate) -> String? {
+        solutionLetters[coordinate]
+    }
+
+    func word(id: String?) -> CrosswordWord? {
+        guard let id else { return nil }
+        return placedWords.first { $0.id == id }
+    }
+
+    func word(containing coordinate: GridCoordinate) -> CrosswordWord? {
+        placedWords.first { $0.letterCoordinates.contains(coordinate) }
+    }
+}
+
+private struct CrosswordWord: Identifiable {
+    let id: String
+    let definitionCell: GridCoordinate
+    let definitions: [String]
+    let word: String
+    let direction: CrosswordDirection
+
+    nonisolated init?(payload: [String: Any]) {
+        guard let id = payload["id"] as? String,
+              let definitionPayload = payload["definitionCell"] as? [String: Any],
+              let definitionCell = GridCoordinate(payload: definitionPayload),
+              let word = payload["word"] as? String,
+              let directionPayload = payload["direction"] as? [String: Any],
+              let direction = CrosswordDirection(payload: directionPayload) else {
+            return nil
+        }
+
+        self.id = id
+        self.definitionCell = definitionCell
+        self.definitions = payload["definitions"] as? [String] ?? []
+        self.word = word
+        self.direction = direction
+    }
+
+    var letters: [String] {
+        word
+            .uppercased()
+            .filter { !$0.isWhitespace && $0 != "-" && $0 != "'" }
+            .map { String($0) }
+    }
+
+    var letterCoordinates: [GridCoordinate] {
+        let startRow = definitionCell.row + direction.startRowDelta
+        let startColumn = definitionCell.column + direction.startColumnDelta
+
+        return letters.indices.map { index in
+            GridCoordinate(
+                row: startRow + index * direction.rowDelta,
+                column: startColumn + index * direction.columnDelta
+            )
+        }
+    }
+
+    var arrowSymbol: String {
+        direction.rowDelta == 1 ? "↓" : "→"
+    }
+
+    var definitionSlotPriority: Int {
+        if direction.rowDelta == 0 {
+            return direction.startRowDelta == 1 ? 1 : 0
+        }
+
+        return direction.startColumnDelta == 1 ? 0 : 1
+    }
+}
+
+private struct CrosswordDirection {
+    let rowDelta: Int
+    let columnDelta: Int
+    let startRowDelta: Int
+    let startColumnDelta: Int
+
+    nonisolated init?(payload: [String: Any]) {
+        guard let rowDelta = payload["rowDelta"] as? Int,
+              let columnDelta = payload["columnDelta"] as? Int,
+              let startRowDelta = payload["startRowDelta"] as? Int,
+              let startColumnDelta = payload["startColumnDelta"] as? Int else {
+            return nil
+        }
+
+        self.rowDelta = rowDelta
+        self.columnDelta = columnDelta
+        self.startRowDelta = startRowDelta
+        self.startColumnDelta = startColumnDelta
+    }
+}
+
+private struct GridCoordinate: Hashable {
+    let row: Int
+    let column: Int
+
+    init(row: Int, column: Int) {
+        self.row = row
+        self.column = column
+    }
+
+    nonisolated init?(payload: [String: Any]) {
+        guard let row = payload["row"] as? Int,
+              let column = payload["column"] as? Int else {
+            return nil
+        }
+
+        self.row = row
+        self.column = column
+    }
+}
+
+private struct PublicProfile: Identifiable {
+    let id: String
     let uid: String
     let displayName: String
     let avatarName: String
     let isEditor: Bool
+    let completedGridTitles: [String]
 
-    static let placeholder = FeaturedProfile(
-        uid: HomeView.featuredProfileUID,
-        displayName: "Profil",
-        avatarName: "08",
-        isEditor: false
-    )
+    init?(document: QueryDocumentSnapshot) {
+        let data = document.data()
+        let pseudo = data["pseudo"] as? String
+        let uid = (data["uid"] as? String) ?? document.documentID
+        let avatarID = (data["avatarID"] as? String) ?? "08.png"
+        let role = (data["role"] as? String)?.lowercased()
+        let status = (data["status"] as? String)?.lowercased()
+
+        guard let pseudo, !pseudo.isEmpty else {
+            return nil
+        }
+
+        self.id = document.documentID
+        self.uid = uid
+        self.displayName = pseudo
+        self.avatarName = avatarID.replacingOccurrences(of: ".png", with: "")
+        self.isEditor = role == "editor" || status == "editor"
+        self.completedGridTitles = HomeView.completedGridTitles(from: data)
+    }
 }
 
 private struct HomeContent: View {
     let displayName: String
     let avatarName: String
     let isEditor: Bool
-    let featuredProfile: FeaturedProfile
+    let selectedGrid: PublishedGrid?
+    let selectedGridIndex: Int
+    let gridCount: Int
+    let isLoadingPublishedGrids: Bool
+    let gridLoadingMessage: String?
+    let gridAccessMessage: String?
+    let isLoadingRewardedAd: Bool
+    let requiresRewardedAd: Bool
+    let selectedGridIsCompleted: Bool
     let profileAction: () -> Void
-    let featuredProfileAction: () -> Void
+    let previousGridAction: () -> Void
+    let nextGridAction: () -> Void
+    let playGridAction: () -> Void
+    let wizzAction: () -> Void
 
     var body: some View {
         VStack(spacing: 22) {
@@ -241,21 +789,1154 @@ private struct HomeContent: View {
             }
             .buttonStyle(.plain)
 
+            PublishedGridCard(
+                grid: selectedGrid,
+                selectedIndex: selectedGridIndex,
+                gridCount: gridCount,
+                isLoading: isLoadingPublishedGrids,
+                message: gridLoadingMessage,
+                accessMessage: gridAccessMessage,
+                isLoadingRewardedAd: isLoadingRewardedAd,
+                requiresRewardedAd: requiresRewardedAd,
+                isCompleted: selectedGridIsCompleted,
+                previousAction: previousGridAction,
+                nextAction: nextGridAction,
+                playAction: playGridAction
+            )
+
             HomeNativeAdCard(adUnitID: "ca-app-pub-1003964550278910/3236151939")
 
-            Button(action: featuredProfileAction) {
-                ProfileSummaryCard(
-                    displayName: featuredProfile.displayName,
-                    avatarName: featuredProfile.avatarName,
-                    isEditor: featuredProfile.isEditor,
-                    eyebrow: "Profil"
-                )
+            Spacer(minLength: 0)
+
+            WizzFooter(wizzAction: wizzAction)
+        }
+        .padding(14)
+    }
+}
+
+private struct WizzShakeEffect: GeometryEffect {
+    var trigger: Int
+    var animatableData: CGFloat
+
+    init(trigger: Int) {
+        self.trigger = trigger
+        self.animatableData = CGFloat(trigger)
+    }
+
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        let progress = animatableData - floor(animatableData)
+        guard progress > 0 else { return ProjectionTransform(.identity) }
+
+        let angle = progress * .pi * 18
+        let decay = 1 - progress
+        let x = sin(angle) * 14 * decay
+        let y = cos(angle * 0.85) * 7 * decay
+        let rotation = sin(angle * 0.65) * 0.018 * decay
+        let transform = CGAffineTransform(translationX: x, y: y).rotated(by: rotation)
+        return ProjectionTransform(transform)
+    }
+}
+
+private struct WizzFooter: View {
+    let wizzAction: () -> Void
+
+    @State private var count = 0
+    @State private var isSending = false
+
+    private let endpoint = URL(string: "https://withered-mountain-e272.lrphoton-stats.workers.dev")
+
+    var body: some View {
+        Button(action: sendWizz) {
+            Text("🫨 Envoyer un Wizz (\(count) envoyés)")
+                .font(.xpTahoma(size: 13, weight: .bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .buttonStyle(XPButtonStyle())
+        .disabled(isSending)
+        .opacity(isSending ? 0.55 : 1)
+        .padding(10)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+        .task(loadCount)
+    }
+
+    private func loadCount() async {
+        guard let endpoint else { return }
+
+        do {
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let response = try JSONDecoder().decode(WizzResponse.self, from: data)
+            count = response.count
+        } catch {
+            return
+        }
+    }
+
+    private func sendWizz() {
+        guard let endpoint, !isSending else { return }
+        wizzAction()
+        let previousCount = count
+        count += 1
+        isSending = true
+
+        Task {
+            do {
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Accept")
+                let (data, _) = try await URLSession.shared.data(for: request)
+                let response = try JSONDecoder().decode(WizzResponse.self, from: data)
+                await MainActor.run {
+                    count = response.count
+                    isSending = false
+                }
+            } catch {
+                await MainActor.run {
+                    count = previousCount
+                    isSending = false
+                }
             }
-            .buttonStyle(.plain)
+        }
+    }
+}
+
+private struct WizzResponse: Decodable {
+    let count: Int
+}
+
+private struct PublicProfileListCard: View {
+    let profiles: [PublicProfile]
+    let isLoading: Bool
+    let message: String?
+    let selectAction: (PublicProfile) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Profils de test")
+                .font(.custom("Tahoma", size: 13))
+                .foregroundStyle(.black.opacity(0.7))
+
+            if profiles.isEmpty {
+                Text(isLoading ? "Chargement..." : (message ?? "Aucun profil public"))
+                    .font(.xpTahoma(size: 15, weight: .bold))
+                    .foregroundStyle(.black)
+                    .lineLimit(2)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(profiles) { profile in
+                        Button {
+                            selectAction(profile)
+                        } label: {
+                            HStack(spacing: 10) {
+                                AvatarBadge(name: profile.avatarName, size: 34)
+
+                                HStack(spacing: 8) {
+                                    Text(profile.displayName)
+                                        .font(.xpTahoma(size: 15, weight: .bold))
+                                        .foregroundStyle(.black)
+                                        .lineLimit(1)
+
+                                    if profile.isEditor {
+                                        EditorBadge()
+                                    }
+                                }
+
+                                Spacer(minLength: 0)
+
+                                Text(">")
+                                    .font(.xpTahoma(size: 15, weight: .bold))
+                                    .foregroundStyle(.black.opacity(0.65))
+                            }
+                            .padding(8)
+                            .background(Color.white.opacity(0.45))
+                            .overlay(Rectangle().stroke(Color.black.opacity(0.22), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+    }
+}
+
+private struct PublishedGridCard: View {
+    let grid: PublishedGrid?
+    let selectedIndex: Int
+    let gridCount: Int
+    let isLoading: Bool
+    let message: String?
+    let accessMessage: String?
+    let isLoadingRewardedAd: Bool
+    let requiresRewardedAd: Bool
+    let isCompleted: Bool
+    let previousAction: () -> Void
+    let nextAction: () -> Void
+    let playAction: () -> Void
+
+    private var canGoToOlderGrid: Bool {
+        selectedIndex + 1 < gridCount
+    }
+
+    private var canGoToNewerGrid: Bool {
+        selectedIndex > 0
+    }
+
+    private var playButtonTitle: String {
+        if isCompleted {
+            return "Revoir"
+        }
+
+        if isLoadingRewardedAd {
+            return "Chargement..."
+        }
+
+        return requiresRewardedAd ? "Jouer après pub" : "Jouer"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(selectedIndex == 0 ? "Grille de la semaine" : "Grille précédente")
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.7))
+
+                if let grid {
+                    HStack(spacing: 8) {
+                        Text(grid.title)
+                            .font(.xpTahoma(size: 22, weight: .bold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+
+                        if isCompleted {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 19, weight: .bold))
+                                .foregroundStyle(Color(red: 0.0, green: 0.56, blue: 0.18))
+                                .accessibilityLabel("Grille terminee")
+                        }
+                    }
+
+                    Text("Publiee le \(grid.formattedReleaseDate)")
+                        .font(.custom("Tahoma", size: 13))
+                        .foregroundStyle(.black.opacity(0.72))
+                        .lineLimit(1)
+                } else {
+                    Text(isLoading ? "Chargement..." : (message ?? "Aucune grille publiee"))
+                        .font(.xpTahoma(size: 15, weight: .bold))
+                        .foregroundStyle(.black)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Button(action: previousAction) {
+                    Text("<")
+                        .font(.xpTahoma(size: 18, weight: .bold))
+                        .frame(width: 36, height: 30)
+                }
+                .buttonStyle(XPButtonStyle())
+                .opacity(canGoToOlderGrid ? 1 : 0.45)
+                .disabled(!canGoToOlderGrid)
+
+                Button(playButtonTitle, action: playAction)
+                    .buttonStyle(XPButtonStyle())
+                    .frame(maxWidth: .infinity)
+                    .opacity(grid == nil || isLoadingRewardedAd ? 0.45 : 1)
+                    .disabled(grid == nil || isLoadingRewardedAd)
+
+                Button(action: nextAction) {
+                    Text(">")
+                        .font(.xpTahoma(size: 18, weight: .bold))
+                        .frame(width: 36, height: 30)
+                }
+                .buttonStyle(XPButtonStyle())
+                .opacity(canGoToNewerGrid ? 1 : 0.45)
+                .disabled(!canGoToNewerGrid)
+            }
+
+            if let accessMessage, !accessMessage.isEmpty {
+                Text(accessMessage)
+                    .font(.custom("Tahoma", size: 12))
+                    .foregroundStyle(.black.opacity(0.72))
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+    }
+}
+
+private struct GridGameContent: View {
+    let grid: PublishedGrid
+    let userID: String
+    let backAction: () -> Void
+    let completionRecorded: (String) -> Void
+
+    @State private var answers: [GridCoordinate: String] = [:]
+    @State private var wrongCells: Set<GridCoordinate> = []
+    @State private var selectedWordID: String?
+    @State private var selectedCell: GridCoordinate?
+    @State private var inputIndex = 0
+    @State private var elapsedSeconds = 0
+    @State private var timerTask: Task<Void, Never>?
+    @State private var isCompleted = false
+    @State private var completedAt: Date?
+
+    private var selectedWord: CrosswordWord? {
+        isCompleted ? nil : grid.crosswordGrid?.word(id: selectedWordID)
+    }
+
+    private var completionStatusText: String {
+        guard let completedAt else { return "Grille terminée" }
+        return "Grille terminée le \(Self.completionDateFormatter.string(from: completedAt))"
+    }
+
+    private static let completionDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.dateStyle = .long
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    var body: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(grid.title)
+                        .font(.xpTahoma(size: 22, weight: .bold))
+                        .foregroundStyle(.black)
+                        .lineLimit(1)
+
+                    Text("Publiée le \(grid.formattedReleaseDate)")
+                        .font(.custom("Tahoma", size: 13))
+                        .foregroundStyle(.black.opacity(0.72))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 8) {
+                    if !isCompleted {
+                        Button("Vérifier") {
+                            if verifyAnswers(), isGridFullyAnswered() {
+                                closeKeyboard()
+                                completeGrid()
+                            }
+                        }
+                        .buttonStyle(XPButtonStyle())
+                    }
+
+                    Button("Quitter", action: backAction)
+                        .buttonStyle(XPButtonStyle())
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.xpPanel)
+            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+            .zIndex(2)
+
+            if let crosswordGrid = grid.crosswordGrid {
+                CrosswordBoardViewport(
+                    grid: crosswordGrid,
+                    answers: $answers,
+                    wrongCells: wrongCells,
+                    isKeyboardActive: !isCompleted && (selectedWord != nil || selectedCell != nil),
+                    isReadOnly: isCompleted,
+                    selectedWordID: $selectedWordID,
+                    selectedCell: $selectedCell,
+                    inputIndex: $inputIndex
+                )
+                .frame(maxHeight: .infinity)
+
+                if !isCompleted && selectedWord == nil && selectedCell == nil {
+                    GridToolsBar()
+                }
+
+                if isCompleted {
+                    Text(completionStatusText)
+                        .font(.xpTahoma(size: 13, weight: .bold))
+                        .foregroundStyle(.black)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.xpPanel)
+                        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                } else if let selectedWord {
+                    Text((selectedWord.definitions.first ?? "DÉFINITION").uppercased())
+                        .font(.xpTahoma(size: 13, weight: .bold))
+                        .foregroundStyle(.black)
+                        .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(Color.xpPanel)
+                        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                }
+
+                if !isCompleted {
+                    NativeKeyboardInput(
+                        isActive: selectedWord != nil || selectedCell != nil,
+                        typeLetter: typeLetter,
+                        backspace: erasePreviousLetter,
+                        closeKeyboard: closeKeyboard
+                    )
+                    .frame(width: 0, height: 0)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    Text("Grille indisponible")
+                        .font(.xpTahoma(size: 20, weight: .bold))
+                        .foregroundStyle(.black)
+                    Text("Le document Firebase doit contenir le JSON dans le champ grid.")
+                        .font(.custom("Tahoma", size: 14))
+                        .foregroundStyle(.black.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(18)
+                .frame(maxWidth: .infinity)
+                .background(Color.xpPanel)
+                .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+            }
 
             Spacer(minLength: 0)
         }
         .padding(14)
+        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .onAppear {
+            loadSavedAnswers()
+            loadSavedElapsedSeconds()
+            loadCompletionState()
+            startTimer()
+        }
+        .onDisappear {
+            stopTimer()
+            saveElapsedSeconds()
+            persistTimerProgress()
+        }
+        .onChange(of: answers) { _, _ in
+            saveAnswers()
+        }
+        }
+    }
+
+    private var savedAnswersKey: String {
+        "gridAnswers.\(grid.id)"
+    }
+
+    private var savedElapsedSecondsKey: String {
+        "gridElapsedSeconds.\(grid.id)"
+    }
+
+    private var savedCompletionKey: String {
+        "gridCompleted.\(grid.id)"
+    }
+
+    private var savedCompletionDateKey: String {
+        "gridCompletedAt.\(grid.id)"
+    }
+
+    private var safeGridStorageKey: String {
+        grid.id
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+    }
+
+    private func typeLetter(_ letter: String) {
+        let normalizedLetter = String(letter.uppercased().prefix(1))
+        guard !normalizedLetter.isEmpty else { return }
+
+        if let selectedWord {
+            guard selectedWord.letterCoordinates.indices.contains(inputIndex) else { return }
+            let coordinate = selectedWord.letterCoordinates[inputIndex]
+            answers[coordinate] = normalizedLetter
+            wrongCells.remove(coordinate)
+
+            if inputIndex + 1 < selectedWord.letterCoordinates.count {
+                inputIndex += 1
+            } else {
+                selectedWordID = nil
+                selectedCell = nil
+                inputIndex = 0
+            }
+        } else if let selectedCell {
+            answers[selectedCell] = normalizedLetter
+            wrongCells.remove(selectedCell)
+            self.selectedCell = nil
+        }
+
+        checkForCompletedGrid()
+    }
+
+    @discardableResult
+    private func verifyAnswers() -> Bool {
+        guard let crosswordGrid = grid.crosswordGrid else { return false }
+        let mistakes: Set<GridCoordinate> = Set(answers.compactMap { coordinate, letter in
+            guard let expectedLetter = crosswordGrid.correctLetter(at: coordinate), letter != expectedLetter else {
+                return nil
+            }
+            return coordinate
+        })
+
+        guard !mistakes.isEmpty else { return true }
+        wrongCells = mistakes
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(650))
+            for coordinate in mistakes {
+                answers.removeValue(forKey: coordinate)
+            }
+            wrongCells.subtract(mistakes)
+        }
+
+        return false
+    }
+
+    private func closeKeyboard() {
+        selectedWordID = nil
+        selectedCell = nil
+        inputIndex = 0
+        dismissNativeKeyboard()
+    }
+
+    private func dismissNativeKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func isGridFullyAnswered() -> Bool {
+        guard let crosswordGrid = grid.crosswordGrid else { return false }
+        let requiredCoordinates = Set(crosswordGrid.solutionLetters.keys)
+        guard !requiredCoordinates.isEmpty else { return false }
+        return requiredCoordinates.allSatisfy { answers[$0]?.isEmpty == false }
+    }
+
+    private func checkForCompletedGrid() {
+        guard !isCompleted, isGridFullyAnswered() else { return }
+        closeKeyboard()
+        guard verifyAnswers() else { return }
+        completeGrid()
+    }
+
+    private func completeGrid() {
+        guard !isCompleted else { return }
+        let finishedAt = Date()
+        isCompleted = true
+        completedAt = finishedAt
+        selectedWordID = nil
+        selectedCell = nil
+        inputIndex = 0
+        dismissNativeKeyboard()
+        UserDefaults.standard.set(true, forKey: savedCompletionKey)
+        UserDefaults.standard.set(finishedAt.timeIntervalSince1970, forKey: savedCompletionDateKey)
+        saveElapsedSeconds()
+        stopTimer()
+        completionRecorded(grid.title)
+        persistCompletedGrid(completedAt: finishedAt)
+    }
+
+    private func startTimer() {
+        guard timerTask == nil, !isCompleted else { return }
+        timerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                elapsedSeconds += 1
+                saveElapsedSeconds()
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timerTask?.cancel()
+        timerTask = nil
+    }
+
+    private func loadSavedElapsedSeconds() {
+        elapsedSeconds = UserDefaults.standard.integer(forKey: savedElapsedSecondsKey)
+    }
+
+    private func saveElapsedSeconds() {
+        UserDefaults.standard.set(elapsedSeconds, forKey: savedElapsedSecondsKey)
+    }
+
+    private func loadCompletionState() {
+        isCompleted = UserDefaults.standard.bool(forKey: savedCompletionKey)
+        let savedTimestamp = UserDefaults.standard.double(forKey: savedCompletionDateKey)
+        completedAt = savedTimestamp > 0 ? Date(timeIntervalSince1970: savedTimestamp) : nil
+        if isCompleted {
+            selectedWordID = nil
+            selectedCell = nil
+            inputIndex = 0
+        }
+    }
+
+    private func persistTimerProgress() {
+        guard elapsedSeconds > 0 else { return }
+        Task {
+            try? await Firestore.firestore()
+                .collection("users")
+                .document(userID)
+                .setData([
+                    "gridTimers": [safeGridStorageKey: elapsedSeconds],
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], merge: true)
+        }
+    }
+
+    private func persistCompletedGrid(completedAt: Date) {
+        let completedPayload: [String: Any] = [
+            "gridId": grid.id,
+            "title": grid.title,
+            "completedAt": Timestamp(date: completedAt),
+            "elapsedSeconds": elapsedSeconds
+        ]
+
+        Task {
+            do {
+                let database = Firestore.firestore()
+                try await database.collection("users").document(userID).setData([
+                    "completedGrids": [safeGridStorageKey: completedPayload],
+                    "completedGridTitles": FieldValue.arrayUnion([grid.title]),
+                    "gridTimers": [safeGridStorageKey: elapsedSeconds],
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], merge: true)
+
+                try await database.collection("publicProfiles").document(userID).setData([
+                    "completedGrids": [safeGridStorageKey: completedPayload],
+                    "completedGridTitles": FieldValue.arrayUnion([grid.title]),
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], merge: true)
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func erasePreviousLetter() {
+        if let selectedWord {
+            guard !selectedWord.letterCoordinates.isEmpty else { return }
+            let currentCoordinate = selectedWord.letterCoordinates[min(inputIndex, selectedWord.letterCoordinates.count - 1)]
+            let targetIndex: Int
+
+            if answers[currentCoordinate] != nil {
+                targetIndex = inputIndex
+            } else {
+                targetIndex = max(inputIndex - 1, 0)
+            }
+
+            let targetCoordinate = selectedWord.letterCoordinates[targetIndex]
+            answers.removeValue(forKey: targetCoordinate)
+            inputIndex = targetIndex
+        } else if let selectedCell {
+            answers.removeValue(forKey: selectedCell)
+        }
+    }
+
+    private func loadSavedAnswers() {
+        guard let savedAnswers = UserDefaults.standard.dictionary(forKey: savedAnswersKey) as? [String: String] else {
+            return
+        }
+
+        answers = Dictionary(uniqueKeysWithValues: savedAnswers.compactMap { key, value in
+            let parts = key.split(separator: ",")
+            guard parts.count == 2,
+                  let row = Int(parts[0]),
+                  let column = Int(parts[1]) else {
+                return nil
+            }
+
+            return (GridCoordinate(row: row, column: column), value)
+        })
+    }
+
+    private func saveAnswers() {
+        let encodedAnswers = Dictionary(uniqueKeysWithValues: answers.map { coordinate, letter in
+            ("\(coordinate.row),\(coordinate.column)", letter)
+        })
+        UserDefaults.standard.set(encodedAnswers, forKey: savedAnswersKey)
+    }
+}
+
+private struct GridToolsBar: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Button("Index") {}
+                .buttonStyle(XPButtonStyle())
+                .disabled(true)
+                .opacity(0.45)
+
+            Button("Lettre hasard") {}
+                .buttonStyle(XPButtonStyle())
+                .disabled(true)
+                .opacity(0.45)
+
+            Button("Choisir lettre") {}
+                .buttonStyle(XPButtonStyle())
+                .disabled(true)
+                .opacity(0.45)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(10)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+    }
+}
+
+private struct CrosswordBoardViewport: View {
+    let grid: CrosswordGrid
+    @Binding var answers: [GridCoordinate: String]
+    let wrongCells: Set<GridCoordinate>
+    let isKeyboardActive: Bool
+    let isReadOnly: Bool
+    @Binding var selectedWordID: String?
+    @Binding var selectedCell: GridCoordinate?
+    @Binding var inputIndex: Int
+
+    @State private var scale: CGFloat = 0.82
+    @State private var lastScale: CGFloat = 0.82
+    @State private var offset: CGSize = .zero
+    @State private var dragStartOffset: CGSize?
+
+    private let cellSize: CGFloat = 38
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.xpPanel
+
+                CrosswordBoard(
+                    grid: grid,
+                    cellSize: cellSize,
+                    answers: $answers,
+                    wrongCells: wrongCells,
+                    isReadOnly: isReadOnly,
+                    selectedWordID: $selectedWordID,
+                    selectedCell: $selectedCell,
+                    inputIndex: $inputIndex
+                )
+                .frame(
+                    width: CGFloat(CrosswordGrid.columnCount) * cellSize,
+                    height: CGFloat(CrosswordGrid.rowCount) * cellSize
+                )
+                .scaleEffect(scale)
+                .offset(offset)
+                .gesture(boardGesture(in: proxy.size))
+            }
+            .clipped()
+            .overlay(Rectangle().stroke(Color.black.opacity(0.45), lineWidth: 1))
+            .onAppear {
+                configureInitialScale(in: proxy.size)
+            }
+            .onChange(of: selectedWordID) { _, _ in
+                updateSelectionViewport(in: proxy.size)
+            }
+            .onChange(of: selectedCell) { _, _ in
+                updateSelectionViewport(in: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, newSize in
+                if selectedWordID == nil && selectedCell == nil {
+                    configureInitialScale(in: newSize)
+                } else {
+                    focusSelection(in: newSize)
+                }
+            }
+        }
+        .background(Color.xpPanel)
+        .clipShape(Rectangle())
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+    }
+
+    private func boardGesture(in size: CGSize) -> some Gesture {
+        let drag = DragGesture()
+            .onChanged { value in
+                let start = dragStartOffset ?? offset
+                dragStartOffset = start
+                offset = clampedOffset(
+                    CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height),
+                    scale: scale,
+                    viewport: effectiveViewport(for: size)
+                )
+            }
+            .onEnded { _ in
+                dragStartOffset = nil
+                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
+            }
+
+        let magnify = MagnificationGesture()
+            .onChanged { value in
+                scale = min(max(lastScale * value, minimumScale(in: size)), 1.55)
+                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
+            }
+            .onEnded { _ in
+                lastScale = scale
+                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
+            }
+
+        return drag.simultaneously(with: magnify)
+    }
+
+    private func configureInitialScale(in size: CGSize) {
+        let fitWidth = max(size.width - 28, 0) / (CGFloat(CrosswordGrid.columnCount) * cellSize)
+        let fitHeight = max(size.height - 28, 0) / (CGFloat(CrosswordGrid.rowCount) * cellSize)
+        let fittedScale = min(fitWidth, fitHeight)
+        let initialScale = min(max(fittedScale, minimumScale(in: size)), 1.0)
+        scale = initialScale
+        lastScale = initialScale
+        offset = .zero
+    }
+
+    private func updateSelectionViewport(in size: CGSize) {
+        if selectedWordID == nil && selectedCell == nil {
+            configureInitialScale(in: size)
+        } else {
+            focusSelection(in: size)
+        }
+    }
+
+    private func focusSelection(in size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+
+        let viewport = effectiveViewport(for: size)
+
+        if let word = grid.word(id: selectedWordID) {
+            focus(coordinates: word.letterCoordinates, isVertical: word.direction.rowDelta != 0, viewport: viewport)
+        } else if let selectedCell {
+            focus(coordinates: [selectedCell], isVertical: false, viewport: viewport)
+        }
+    }
+
+    private func focus(coordinates: [GridCoordinate], isVertical: Bool, viewport: CGSize) {
+        guard let firstRow = coordinates.map(\.row).min(),
+              let lastRow = coordinates.map(\.row).max(),
+              let firstColumn = coordinates.map(\.column).min(),
+              let lastColumn = coordinates.map(\.column).max() else {
+            return
+        }
+
+        let spanColumns = CGFloat(lastColumn - firstColumn + 1)
+        let spanRows = CGFloat(lastRow - firstRow + 1)
+        let desiredScale: CGFloat
+
+        if isVertical {
+            desiredScale = (viewport.height * 0.86) / max(spanRows * cellSize, cellSize)
+        } else {
+            desiredScale = (viewport.width * 0.86) / max(spanColumns * cellSize, cellSize)
+        }
+
+        let newScale = min(max(desiredScale, minimumScale(in: viewport)), 1.55)
+        let boardWidth = CGFloat(CrosswordGrid.columnCount) * cellSize
+        let boardHeight = CGFloat(CrosswordGrid.rowCount) * cellSize
+        let centerColumn = (CGFloat(firstColumn + lastColumn) + 1) / 2
+        let centerRow = (CGFloat(firstRow + lastRow) + 1) / 2
+        let proposedOffset = CGSize(
+            width: -((centerColumn * cellSize) - boardWidth / 2) * newScale,
+            height: -((centerRow * cellSize) - boardHeight / 2) * newScale
+        )
+
+        scale = newScale
+        lastScale = newScale
+        offset = clampedOffset(proposedOffset, scale: newScale, viewport: viewport)
+    }
+
+    private func effectiveViewport(for size: CGSize) -> CGSize {
+        guard isKeyboardActive else { return size }
+        return CGSize(width: size.width, height: max(size.height - 310, 180))
+    }
+
+    private func minimumScale(in size: CGSize) -> CGFloat {
+        let fitWidth = max(size.width - 28, 0) / (CGFloat(CrosswordGrid.columnCount) * cellSize)
+        let fitHeight = max(size.height - 28, 0) / (CGFloat(CrosswordGrid.rowCount) * cellSize)
+        return min(max(min(fitWidth, fitHeight) * 0.82, 0.58), 0.9)
+    }
+
+    private func clampedOffset(_ proposed: CGSize, scale: CGFloat, viewport: CGSize) -> CGSize {
+        let boardWidth = CGFloat(CrosswordGrid.columnCount) * cellSize * scale
+        let boardHeight = CGFloat(CrosswordGrid.rowCount) * cellSize * scale
+        let maxX = max((boardWidth - viewport.width) / 2, 0)
+        let maxY = max((boardHeight - viewport.height) / 2 + (isKeyboardActive ? 90 : 16), 0)
+
+        return CGSize(
+            width: min(max(proposed.width, -maxX), maxX),
+            height: min(max(proposed.height, -maxY), maxY)
+        )
+    }
+}
+
+private struct CrosswordBoard: View {
+    let grid: CrosswordGrid
+    let cellSize: CGFloat
+    @Binding var answers: [GridCoordinate: String]
+    let wrongCells: Set<GridCoordinate>
+    let isReadOnly: Bool
+    @Binding var selectedWordID: String?
+    @Binding var selectedCell: GridCoordinate?
+    @Binding var inputIndex: Int
+
+    private var selectedWord: CrosswordWord? {
+        isReadOnly ? nil : grid.word(id: selectedWordID)
+    }
+
+    private var selectedCoordinates: Set<GridCoordinate> {
+        guard !isReadOnly else { return [] }
+        var coordinates = Set(selectedWord?.letterCoordinates ?? [])
+        if let selectedCell {
+            coordinates.insert(selectedCell)
+        }
+        return coordinates
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<CrosswordGrid.rowCount, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(0..<CrosswordGrid.columnCount, id: \.self) { column in
+                        let coordinate = GridCoordinate(row: row, column: column)
+                        CrosswordCell(
+                            coordinate: coordinate,
+                            definitionWords: grid.definitionCells[coordinate] ?? [],
+                            selectedWordID: selectedWordID,
+                            letter: letter(at: coordinate),
+                            isSelected: selectedCoordinates.contains(coordinate),
+                            isWrong: !isReadOnly && wrongCells.contains(coordinate),
+                            isBlack: grid.blackCells.contains(coordinate),
+                            isReadOnly: isReadOnly,
+                            cellSize: cellSize,
+                            selectWord: selectWord,
+                            selectCell: selectCell
+                        )
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+    }
+
+    private func selectWord(_ word: CrosswordWord) {
+        guard !isReadOnly else { return }
+        selectedWordID = word.id
+        selectedCell = nil
+        inputIndex = firstEmptyIndex(for: word)
+    }
+
+    private func selectCell(_ coordinate: GridCoordinate) {
+        guard !isReadOnly else { return }
+        selectedWordID = nil
+        selectedCell = coordinate
+        inputIndex = 0
+    }
+
+    private func firstEmptyIndex(for word: CrosswordWord) -> Int {
+        word.letterCoordinates.firstIndex { answers[$0] == nil } ?? 0
+    }
+
+    private func letter(at coordinate: GridCoordinate) -> String {
+        answers[coordinate] ?? ""
+    }
+}
+
+private struct CrosswordCell: View {
+    let coordinate: GridCoordinate
+    let definitionWords: [CrosswordWord]
+    let selectedWordID: String?
+    let letter: String
+    let isSelected: Bool
+    let isWrong: Bool
+    let isBlack: Bool
+    let isReadOnly: Bool
+    let cellSize: CGFloat
+    let selectWord: (CrosswordWord) -> Void
+    let selectCell: (GridCoordinate) -> Void
+
+    private var isDefinition: Bool {
+        !definitionWords.isEmpty
+    }
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(backgroundColor)
+
+            if isDefinition {
+                VStack(spacing: 0) {
+                    ForEach(definitionWords) { word in
+                        DefinitionCellSegment(
+                            word: word,
+                            isSelected: !isReadOnly && word.id == selectedWordID,
+                            isReadOnly: isReadOnly
+                        ) {
+                            selectWord(word)
+                        }
+                    }
+                }
+            } else if !isBlack {
+                Text(letter)
+                    .font(.xpTahoma(size: 22, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard !isReadOnly else { return }
+                        selectCell(coordinate)
+                    }
+            }
+        }
+        .frame(width: cellSize, height: cellSize)
+        .overlay(Rectangle().stroke(Color.black.opacity(0.72), lineWidth: 0.8))
+    }
+
+    private var backgroundColor: Color {
+        if isBlack {
+            return .black
+        }
+
+        if isDefinition {
+            return Color(red: 1.0, green: 0.95, blue: 0.72)
+        }
+
+        if isWrong {
+            return Color(red: 1.0, green: 0.55, blue: 0.52)
+        }
+
+        return isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74) : .white
+    }
+}
+
+private struct DefinitionCellSegment: View {
+    let word: CrosswordWord
+    let isSelected: Bool
+    let isReadOnly: Bool
+    let action: () -> Void
+
+    private var definitionText: String {
+        let text = word.definitions.joined(separator: " / ").uppercased()
+        return text.isEmpty ? " " : text
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 1) {
+                Text(definitionText)
+                    .font(.xpTahoma(size: 6.5, weight: .bold))
+                    .foregroundStyle(.black.opacity(0.82))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.55)
+
+                Text(word.arrowSymbol)
+                    .font(.xpTahoma(size: 10, weight: .bold))
+                    .foregroundStyle(Color(red: 0.0, green: 0.2, blue: 0.75))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isReadOnly)
+        .overlay(Rectangle().stroke(Color.black.opacity(isSelected ? 0.55 : 0.18), lineWidth: isSelected ? 1 : 0.5))
+    }
+}
+
+private struct NativeKeyboardInput: UIViewRepresentable {
+    let isActive: Bool
+    let typeLetter: (String) -> Void
+    let backspace: () -> Void
+    let closeKeyboard: () -> Void
+
+    func makeUIView(context: Context) -> KeyboardTextField {
+        let textField = KeyboardTextField()
+        textField.keyboardType = .asciiCapable
+        textField.autocapitalizationType = .allCharacters
+        textField.autocorrectionType = .no
+        textField.spellCheckingType = .no
+        textField.smartInsertDeleteType = .no
+        textField.returnKeyType = .done
+        textField.textContentType = nil
+        textField.inputAssistantItem.leadingBarButtonGroups = []
+        textField.inputAssistantItem.trailingBarButtonGroups = []
+        textField.tintColor = .clear
+        textField.textColor = .clear
+        textField.backgroundColor = .clear
+        textField.delegate = context.coordinator
+        textField.deleteBackwardHandler = backspace
+        return textField
+    }
+
+    func updateUIView(_ uiView: KeyboardTextField, context: Context) {
+        context.coordinator.typeLetter = typeLetter
+        context.coordinator.backspace = backspace
+        context.coordinator.closeKeyboard = closeKeyboard
+        uiView.deleteBackwardHandler = backspace
+
+        if isActive, !uiView.isFirstResponder {
+            uiView.becomeFirstResponder()
+        } else if !isActive, uiView.isFirstResponder {
+            uiView.resignFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            typeLetter: typeLetter,
+            backspace: backspace,
+            closeKeyboard: closeKeyboard
+        )
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var typeLetter: (String) -> Void
+        var backspace: () -> Void
+        var closeKeyboard: () -> Void
+
+        init(
+            typeLetter: @escaping (String) -> Void,
+            backspace: @escaping () -> Void,
+            closeKeyboard: @escaping () -> Void
+        ) {
+            self.typeLetter = typeLetter
+            self.backspace = backspace
+            self.closeKeyboard = closeKeyboard
+        }
+
+        func textField(
+            _ textField: UITextField,
+            shouldChangeCharactersIn range: NSRange,
+            replacementString string: String
+        ) -> Bool {
+            if string == "\n" {
+                closeKeyboard()
+            } else if string.isEmpty {
+                backspace()
+            } else if let character = string.uppercased().first, character.isLetter {
+                typeLetter(String(character))
+            }
+
+            textField.text = ""
+            return false
+        }
+    }
+
+    final class KeyboardTextField: UITextField {
+        var deleteBackwardHandler: (() -> Void)?
+
+        override var textInputContextIdentifier: String? {
+            nil
+        }
+
+        override func deleteBackward() {
+            deleteBackwardHandler?()
+            super.deleteBackward()
+        }
     }
 }
 
@@ -275,7 +1956,7 @@ private struct ProfileSummaryCard: View {
                     .foregroundStyle(.black.opacity(0.7))
                 HStack(spacing: 8) {
                     Text(displayName)
-                        .font(.custom("Tahoma", size: 22).weight(.bold))
+                        .font(.xpTahoma(size: 22, weight: .bold))
                         .foregroundStyle(.black)
                         .lineLimit(1)
 
@@ -297,11 +1978,14 @@ private struct PublicProfileContent: View {
     let displayName: String
     let avatarName: String
     let isEditor: Bool
+    let completedGridTitles: [String]
     let backAction: () -> Void
     var settingsAction: (() -> Void)? = nil
 
+
     var body: some View {
-        VStack(spacing: 18) {
+        ZStack {
+            VStack(spacing: 18) {
             ZStack(alignment: .topTrailing) {
                 VStack(spacing: 12) {
                     AvatarBadge(name: avatarName, size: 112)
@@ -309,7 +1993,7 @@ private struct PublicProfileContent: View {
                     VStack(spacing: 6) {
                         HStack(spacing: 8) {
                             Text(displayName)
-                                .font(.custom("Tahoma", size: 24).weight(.bold))
+                                .font(.xpTahoma(size: 24, weight: .bold))
                                 .foregroundStyle(.black)
                                 .lineLimit(1)
 
@@ -340,12 +2024,89 @@ private struct PublicProfileContent: View {
             .background(Color.xpPanel)
             .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Grilles terminées")
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.7))
+
+                if completedGridTitles.isEmpty {
+                    Text("Aucune grille terminée")
+                        .font(.xpTahoma(size: 15, weight: .bold))
+                        .foregroundStyle(.black)
+                } else {
+                    ForEach(completedGridTitles, id: \.self) { title in
+                        Text(title)
+                            .font(.xpTahoma(size: 15, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color.white.opacity(0.45))
+                            .overlay(Rectangle().stroke(Color.black.opacity(0.22), lineWidth: 1))
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.xpPanel)
+            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+
             Button("Retour", action: backAction)
                 .buttonStyle(XPButtonStyle())
 
             Spacer(minLength: 0)
         }
         .padding(14)
+        }
+    }
+}
+
+private struct ProfileInfoWindow: View {
+    let closeAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Informations")
+                    .font(.xpTahoma(size: 18, weight: .bold))
+                    .foregroundStyle(.black)
+
+                Spacer(minLength: 0)
+
+                Button("X", action: closeAction)
+                    .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                    .frame(width: 42)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Flèche-moi ça")
+                    .font(.xpTahoma(size: 15, weight: .bold))
+                    .foregroundStyle(.black)
+
+                Text("Les profils publics affichent le pseudo, l'avatar, le statut Éditeur quand il existe, et les grilles terminées. Les données privées du compte restent dans ton espace utilisateur Firebase.")
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Pour toute question légale, confidentialité ou suppression de données, contacte-nous par e-mail.")
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button("Nous contacter", action: openContactMail)
+                .buttonStyle(XPButtonStyle())
+                .frame(maxWidth: .infinity)
+        }
+        .padding(14)
+        .frame(maxWidth: 320)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+        .shadow(color: .black.opacity(0.32), radius: 8, x: 0, y: 5)
+    }
+
+    private func openContactMail() {
+        guard let url = URL(string: "mailto:contact@flechemoica.fr") else { return }
+        UIApplication.shared.open(url)
     }
 }
 
@@ -360,6 +2121,37 @@ private struct ProfileSettingsContent: View {
     let userChanged: (User) -> Void
     let signedOut: () -> Void
 
+    private enum SettingsPanel: Identifiable {
+        case displayName
+        case avatar
+        case password
+        case deleteAccount
+        case legal
+        case privacyPolicy
+
+        var id: String {
+            switch self {
+            case .displayName: return "displayName"
+            case .avatar: return "avatar"
+            case .password: return "password"
+            case .deleteAccount: return "deleteAccount"
+            case .legal: return "legal"
+            case .privacyPolicy: return "privacyPolicy"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .displayName: return "Modifier le pseudo"
+            case .avatar: return "Changer d'avatar"
+            case .password: return "Changer le mot de passe"
+            case .deleteAccount: return "Supprimer le compte"
+            case .legal: return "Mentions légales"
+            case .privacyPolicy: return "Politique de confidentialité"
+            }
+        }
+    }
+
     @State private var displayName: String
     @State private var selectedAvatarIndex: Int
     @State private var savedDisplayName: String
@@ -371,6 +2163,7 @@ private struct ProfileSettingsContent: View {
     @State private var statusText = ""
     @State private var isSubmitting = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var activePanel: SettingsPanel?
 
     init(
         user: User,
@@ -443,80 +2236,97 @@ private struct ProfileSettingsContent: View {
         return true
     }
 
+    private var appVersionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let visibleVersion: String
+        if let version, !version.isEmpty {
+            visibleVersion = version
+        } else {
+            visibleVersion = "1.0"
+        }
+
+        if let build, !build.isEmpty, build != visibleVersion {
+            return "Version \(visibleVersion) (\(build))"
+        }
+
+        return "Version \(visibleVersion)"
+    }
+
     var body: some View {
-        ScrollView {
+        ZStack {
             VStack(spacing: 14) {
-                VStack(alignment: .leading, spacing: 12) {
-                    SettingsSectionTitle("Profil")
-                    ProfileAvatarPickerRow(
-                        avatarName: selectedAvatarName,
-                        previousAction: selectPreviousAvatar,
-                        nextAction: selectNextAvatar
-                    )
-                    ProfileTextField(text: $displayName, prompt: "Nom d'utilisateur")
-                    ProfileReadOnlyField(text: savedEmail, prompt: "Adresse e-mail")
-                }
-                .settingsPanel()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SettingsSectionTitle("Mot de passe")
-                    ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
-                    ProfileSecureField(text: $newPassword, prompt: "Nouveau mot de passe", textContentType: .newPassword)
-                    ProfileSecureField(text: $confirmPassword, prompt: "Confirmation", textContentType: .newPassword)
-                }
-                .settingsPanel()
-
-                VStack(alignment: .leading, spacing: 12) {
-                    SettingsSectionTitle("Suppression du compte")
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button("Supprimer le compte") {
-                            requestAccountDeletionConfirmation()
-                        }
-                        .buttonStyle(XPButtonStyle(foregroundColor: .red))
-                        .disabled(isSubmitting)
-                        Spacer(minLength: 0)
-                    }
-                }
-                .settingsPanel()
-
-                VStack(spacing: 10) {
-                    HStack(spacing: 12) {
-                        Button("Retour", action: backAction)
-                            .buttonStyle(XPButtonStyle())
-                            .disabled(isSubmitting)
-
-                        Button(isSubmitting ? "Enregistrement..." : "Enregistrer") {
-                            saveTapped()
-                        }
+                HStack {
+                    Button("Retour", action: backAction)
                         .buttonStyle(XPButtonStyle())
-                        .opacity(canSave ? 1 : 0.55)
-                        .disabled(!canSave)
-                    }
+                        .disabled(isSubmitting)
 
-                    Button("Deconnexion") {
-                        signOutTapped()
-                    }
-                    .buttonStyle(XPButtonStyle(foregroundColor: .red))
-                    .disabled(isSubmitting)
-
-                    if !statusText.isEmpty {
-                        Text(statusText)
-                            .font(.custom("Tahoma", size: 13))
-                            .foregroundStyle(.black.opacity(0.78))
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 10)
-                    }
+                    Spacer(minLength: 0)
                 }
-                .padding(.top, 2)
 
-                Spacer(minLength: 0)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SettingsSectionTitle("Compte")
+                        SettingsMenuButton(title: "Modifier le pseudo") {
+                            activePanel = .displayName
+                        }
+                        SettingsMenuButton(title: "Changer d'avatar") {
+                            activePanel = .avatar
+                        }
+                        SettingsMenuButton(title: "Changer le mot de passe") {
+                            activePanel = .password
+                        }
+
+                        SettingsSectionTitle("Confidentialité")
+                            .padding(.top, 4)
+                        SettingsMenuButton(title: "Politique de confidentialité") {
+                            activePanel = .privacyPolicy
+                        }
+                        SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
+                            activePanel = .deleteAccount
+                        }
+
+                        SettingsSectionTitle("Informations")
+                            .padding(.top, 4)
+                        SettingsMenuButton(title: "Mentions légales") {
+                            activePanel = .legal
+                        }
+                        Text(appVersionText)
+                            .font(.custom("Tahoma", size: 12))
+                            .foregroundStyle(.black.opacity(0.55))
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 2)
+
+                        if !statusText.isEmpty {
+                            Text(statusText)
+                                .font(.custom("Tahoma", size: 13))
+                                .foregroundStyle(.black.opacity(0.78))
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 4)
+                        }
+                    }
+                    .settingsPanel()
+                }
+
+                Button("Déconnexion") {
+                    signOutTapped()
+                }
+                .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                .disabled(isSubmitting)
             }
             .padding(14)
+
+            if let activePanel {
+                SettingsDetailWindow(title: activePanel.title) {
+                    self.activePanel = nil
+                } content: {
+                    panelContent(for: activePanel)
+                }
+            }
         }
         .confirmationDialog(
-            "Supprimer definitivement ce compte ?",
+            "Supprimer définitivement ce compte ?",
             isPresented: $isShowingDeleteConfirmation,
             titleVisibility: .visible
         ) {
@@ -525,8 +2335,83 @@ private struct ProfileSettingsContent: View {
             }
             Button("Annuler", role: .cancel) {}
         } message: {
-            Text("Le compte Firebase Auth et les documents Firestore users/publicProfiles seront supprimes.")
+            Text("Le compte Firebase Auth et les documents Firestore users/publicProfiles seront supprimés.")
         }
+    }
+
+    @ViewBuilder
+    private func panelContent(for panel: SettingsPanel) -> some View {
+        switch panel {
+        case .displayName:
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsSectionTitle("Pseudo actuel")
+                ProfileReadOnlyField(text: savedDisplayName, prompt: "Pseudo")
+                ProfileTextField(text: $displayName, prompt: "Nouveau pseudo")
+                savePanelButton(title: "Enregistrer")
+            }
+        case .avatar:
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsSectionTitle("Avatar actuel")
+                ProfileAvatarPickerRow(
+                    avatarName: selectedAvatarName,
+                    previousAction: selectPreviousAvatar,
+                    nextAction: selectNextAvatar
+                )
+                savePanelButton(title: "Enregistrer")
+            }
+        case .password:
+            VStack(alignment: .leading, spacing: 12) {
+                ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
+                ProfileSecureField(text: $newPassword, prompt: "Nouveau mot de passe", textContentType: .newPassword)
+                ProfileSecureField(text: $confirmPassword, prompt: "Confirmation", textContentType: .newPassword)
+                savePanelButton(title: "Changer le mot de passe")
+            }
+        case .deleteAccount:
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsTextPanel(lines: [
+                    "Cette action supprime définitivement le compte Firebase Auth et les documents Firestore users/publicProfiles.",
+                    "Entre ton mot de passe actuel pour confirmer."
+                ])
+                ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
+                Button("Supprimer le compte") {
+                    requestAccountDeletionConfirmation()
+                }
+                .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                .disabled(isSubmitting)
+            }
+        case .legal:
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsTextPanel(lines: [
+                    "Éditeur : Flèche-moi ça.",
+                    "Contact : contact@flechemoica.fr.",
+                    "Les informations légales complètes sont aussi disponibles sur flechemoica.fr."
+                ])
+                Button("Nous contacter", action: openContactMail)
+                    .buttonStyle(XPButtonStyle())
+                    .frame(maxWidth: .infinity)
+            }
+        case .privacyPolicy:
+            SettingsTextPanel(lines: [
+                "L'application utilise Firebase pour l'authentification, les profils, les grilles et la sauvegarde des grilles terminées.",
+                "AdMob peut être utilisé pour afficher des annonces, dont les annonces avec récompense.",
+                "Tu peux nous contacter par e-mail pour toute question de confidentialité."
+            ])
+        }
+    }
+
+    private func savePanelButton(title: String) -> some View {
+        Button(isSubmitting ? "Enregistrement..." : title) {
+            saveTapped()
+        }
+        .buttonStyle(XPButtonStyle())
+        .opacity(canSave ? 1 : 0.55)
+        .disabled(!canSave)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func openContactMail() {
+        guard let url = URL(string: "mailto:contact@flechemoica.fr") else { return }
+        UIApplication.shared.open(url)
     }
 
     private func saveTapped() {
@@ -743,6 +2628,80 @@ private enum ProfileSettingsError: Error {
     }
 }
 
+private struct SettingsMenuButton: View {
+    let title: String
+    var isDestructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(title, action: action)
+            .buttonStyle(XPButtonStyle(foregroundColor: isDestructive ? .red : .black))
+            .frame(maxWidth: .infinity)
+    }
+}
+
+private struct SettingsDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.black.opacity(0.22))
+            .frame(height: 1)
+            .padding(.vertical, 3)
+    }
+}
+
+private struct SettingsDetailWindow<Content: View>: View {
+    let title: String
+    let closeAction: () -> Void
+    let content: Content
+
+    init(title: String, closeAction: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.closeAction = closeAction
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.xpTahoma(size: 18, weight: .bold))
+                    .foregroundStyle(.black)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+
+                Spacer(minLength: 0)
+
+                Button("X", action: closeAction)
+                    .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                    .frame(width: 42)
+            }
+
+            content
+        }
+        .padding(14)
+        .frame(maxWidth: 330)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+        .shadow(color: .black.opacity(0.32), radius: 8, x: 0, y: 5)
+        .padding(14)
+    }
+}
+
+private struct SettingsTextPanel: View {
+    let lines: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(lines, id: \.self) { line in
+                Text(line)
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.76))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 private struct SettingsSectionTitle: View {
     let title: String
 
@@ -752,7 +2711,7 @@ private struct SettingsSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.custom("Tahoma", size: 14).weight(.bold))
+            .font(.xpTahoma(size: 14, weight: .bold))
             .foregroundStyle(.black.opacity(0.82))
     }
 }
@@ -831,7 +2790,7 @@ private struct ProfileSecureField: View {
 private struct EditorBadge: View {
     var body: some View {
         Text("Éditeur")
-            .font(.custom("Tahoma", size: 12).weight(.bold))
+            .font(.xpTahoma(size: 12, weight: .bold))
             .foregroundStyle(.black.opacity(0.78))
             .padding(.horizontal, 8)
             .frame(height: 22)
@@ -855,7 +2814,7 @@ private struct AvatarBadge: View {
                     .padding(4)
             } else {
                 Text(name)
-                    .font(.custom("Tahoma", size: 18).weight(.bold))
+                    .font(.xpTahoma(size: 18, weight: .bold))
                     .foregroundStyle(.black.opacity(0.65))
             }
         }

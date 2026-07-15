@@ -15,7 +15,7 @@ struct LaunchScreenView: View {
 
                 VStack(spacing: 10) {
                     Text("Flèche-moi ça")
-                        .font(.custom("Tahoma", size: 30).weight(.bold))
+                        .font(.xpTahoma(size: 30, weight: .bold))
                         .foregroundStyle(.white)
 
                     XPProgressBar(progress: progress)

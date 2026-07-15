@@ -34,7 +34,7 @@ private struct NativeAdPlaceholder: View {
             HStack(spacing: 8) {
                 AdBadgeIcon()
                 Text("Publicité")
-                    .font(.custom("Tahoma", size: 18).weight(.bold))
+                    .font(.xpTahoma(size: 18, weight: .bold))
                     .foregroundStyle(.black)
             }
             Text(message)
@@ -67,11 +67,7 @@ private struct NativeAdContainer: View {
     @StateObject private var loader = NativeAdLoader()
 
     private var effectiveAdUnitID: String {
-        #if DEBUG
-        return "ca-app-pub-3940256099942544/3986624511"
-        #else
-        return adUnitID
-        #endif
+        AdMobConfiguration.nativeAdUnitID(productionID: adUnitID)
     }
 
     var body: some View {
@@ -86,7 +82,10 @@ private struct NativeAdContainer: View {
             }
         }
         .onAppear {
-            loader.load(adUnitID: effectiveAdUnitID)
+            Task {
+                await AdMobConfiguration.refreshTestAdsStatus()
+                loader.load(adUnitID: effectiveAdUnitID)
+            }
         }
     }
 }
@@ -192,6 +191,7 @@ private struct NativeAdRepresentable: UIViewRepresentable {
         callToActionButton.backgroundColor = UIColor(Color.xpChrome)
         callToActionButton.layer.borderColor = UIColor(Color.xpBlueMid).cgColor
         callToActionButton.layer.borderWidth = 1
+        callToActionButton.isUserInteractionEnabled = false
         callToActionButton.translatesAutoresizingMaskIntoConstraints = false
 
         let adBadge = UILabel()

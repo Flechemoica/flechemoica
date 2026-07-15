@@ -1,5 +1,16 @@
 import SwiftUI
 
+extension Font {
+    static func xpTahoma(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        switch weight {
+        case .bold, .semibold, .heavy, .black:
+            return .custom("Tahoma-Bold", size: size)
+        default:
+            return .custom("Tahoma", size: size)
+        }
+    }
+}
+
 extension Color {
     static let xpBlueTop = Color(red: 0.25, green: 0.57, blue: 1.0)
     static let xpBlueMid = Color(red: 0.02, green: 0.29, blue: 0.82)
@@ -16,7 +27,7 @@ struct XPTitleBar: View {
         HStack(spacing: 8) {
             XPLogoView(size: 24)
             Text(title)
-                .font(.custom("Tahoma", size: 17).weight(.bold))
+                .font(.xpTahoma(size: 17, weight: .bold))
                 .lineLimit(1)
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.65), radius: 0, x: 1, y: 1)
@@ -95,7 +106,9 @@ struct XPWindow<Content: View>: View {
         VStack(spacing: 0) {
             XPTitleBar(title: title)
             content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.xpChrome)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.1, green: 0.31, blue: 0.61), lineWidth: 3))
@@ -108,7 +121,7 @@ struct XPButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.custom("Tahoma", size: 15).weight(.semibold))
+            .font(.xpTahoma(size: 15, weight: .semibold))
             .foregroundStyle(foregroundColor)
             .padding(.horizontal, 18)
             .frame(height: 38)

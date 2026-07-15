@@ -15,13 +15,19 @@ struct AccountSetupView: View {
             }
         }
 
+        var windowTitle: String {
+            switch self {
+            case .signUp: "Inscription.exe"
+            case .signIn: "Connexion.exe"
+            }
+        }
     }
 
     private static let avatarNames = ["01", "02", "03", "04", "05", "06", "07", "08", "09"]
 
     var onAuthenticated: (User) -> Void = { _ in }
 
-    @State private var authMode: AuthMode = .signIn
+    @State private var authMode: AuthMode = .signUp
     @State private var pseudo = ""
     @State private var email = ""
     @State private var password = ""
@@ -35,89 +41,89 @@ struct AccountSetupView: View {
             ZStack(alignment: .top) {
                 Color.black.ignoresSafeArea()
 
-                XPWindow(title: "Connexion.exe") {
-                VStack(spacing: 0) {
-                    XPMenuBar(selectedMode: $authMode) { mode in
-                        switchMode(to: mode)
-                    }
+                XPWindow(title: authMode.windowTitle) {
+                    VStack(spacing: 0) {
+                        XPMenuBar(selectedMode: $authMode) { mode in
+                            switchMode(to: mode)
+                        }
 
-                    ScrollView {
-                        VStack(spacing: 18) {
-                            HStack(spacing: 14) {
-                                XPLogoView(size: 86)
+                        ScrollView {
+                            VStack(spacing: 18) {
+                                HStack(spacing: 14) {
+                                    XPLogoView(size: 86)
 
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text("FLÈCHE")
-                                    Text("MOI ÇA")
-                                }
-                                .font(.system(size: 25, weight: .bold).italic())
-                                .foregroundStyle(.black)
-                                .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 18)
-                            .padding(.horizontal, 22)
-
-                            VStack(alignment: .leading, spacing: 14) {
-                                if authMode == .signUp {
-                                    XPTextField(text: $pseudo, prompt: "Pseudo")
-                                }
-
-                                XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .emailAddress)
-                                XPSecureField(text: $password, prompt: "Mot de Passe", textContentType: authMode == .signUp ? .newPassword : .password)
-
-                                if authMode == .signUp {
-                                    AvatarPickerRow(
-                                        avatarName: selectedAvatarName,
-                                        previousAction: selectPreviousAvatar,
-                                        nextAction: selectNextAvatar
-                                    )
-                                }
-                            }
-                            .padding(14)
-                            .background(Color.xpPanel)
-                            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
-                            .padding(.horizontal, 14)
-
-                            VStack(spacing: 10) {
-                                Button {
-                                    submitTapped()
-                                } label: {
-                                    Text(isSubmitting ? submittingButtonTitle : authMode.primaryButtonTitle)
-                                }
-                                .buttonStyle(XPButtonStyle())
-                                .opacity(canSubmit && !isSubmitting ? 1 : 0.55)
-                                .disabled(!canSubmit || isSubmitting)
-
-                                if authMode == .signIn {
-                                    Button {
-                                        sendPasswordResetTapped()
-                                    } label: {
-                                        Text(isSendingPasswordReset ? "Envoi..." : "Mot de passe oublié ?")
-                                            .font(.custom("Tahoma", size: 13))
-                                            .underline()
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text("FLÈCHE")
+                                        Text("MOI ÇA")
                                     }
-                                    .buttonStyle(.plain)
-                                    .foregroundStyle(.black.opacity(canSendPasswordReset ? 0.85 : 0.45))
-                                    .disabled(!canSendPasswordReset || isSubmitting || isSendingPasswordReset)
+                                    .font(.system(size: 25, weight: .bold).italic())
+                                    .foregroundStyle(.black)
+                                    .lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .padding(.top, 18)
+                                .padding(.horizontal, 22)
+
+                                VStack(alignment: .leading, spacing: 14) {
+                                    if authMode == .signUp {
+                                        XPTextField(text: $pseudo, prompt: "Pseudo")
+                                    }
+
+                                    XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .emailAddress)
+                                    XPSecureField(text: $password, prompt: "Mot de Passe", textContentType: authMode == .signUp ? .newPassword : .password)
+
+                                    if authMode == .signUp {
+                                        AvatarPickerRow(
+                                            avatarName: selectedAvatarName,
+                                            previousAction: selectPreviousAvatar,
+                                            nextAction: selectNextAvatar
+                                        )
+                                    }
+                                }
+                                .padding(14)
+                                .background(Color.xpPanel)
+                                .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                                .padding(.horizontal, 14)
+
+                                VStack(spacing: 10) {
+                                    Button {
+                                        submitTapped()
+                                    } label: {
+                                        Text(isSubmitting ? submittingButtonTitle : authMode.primaryButtonTitle)
+                                    }
+                                    .buttonStyle(XPButtonStyle())
+                                    .opacity(canSubmit && !isSubmitting ? 1 : 0.55)
+                                    .disabled(!canSubmit || isSubmitting)
+
+                                    if authMode == .signIn {
+                                        Button {
+                                            sendPasswordResetTapped()
+                                        } label: {
+                                            Text(isSendingPasswordReset ? "Envoi..." : "Mot de passe oublié ?")
+                                                .font(.custom("Tahoma", size: 13))
+                                                .underline()
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(.black.opacity(canSendPasswordReset ? 0.85 : 0.45))
+                                        .disabled(!canSendPasswordReset || isSubmitting || isSendingPasswordReset)
+                                    }
+
+                                    if !statusText.isEmpty {
+                                        Text(statusText)
+                                            .font(.custom("Tahoma", size: 13))
+                                            .foregroundStyle(.black.opacity(0.78))
+                                            .multilineTextAlignment(.center)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.horizontal, 18)
+                                    }
                                 }
 
-                                if !statusText.isEmpty {
-                                    Text(statusText)
-                                        .font(.custom("Tahoma", size: 13))
-                                        .foregroundStyle(.black.opacity(0.78))
-                                        .multilineTextAlignment(.center)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.horizontal, 18)
-                                }
+                                Spacer(minLength: 0)
+                                    .frame(height: 8)
                             }
-
-                            Spacer(minLength: 0)
-                                .frame(height: 8)
                         }
                     }
                 }
-            }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding(.horizontal, 3)
                 .padding(.bottom, 4)
@@ -428,7 +434,7 @@ private struct AvatarPreview: View {
                     .padding(3)
             } else {
                 Text(name)
-                    .font(.custom("Tahoma", size: 18).weight(.bold))
+                    .font(.xpTahoma(size: 18, weight: .bold))
                     .foregroundStyle(.black.opacity(0.65))
             }
         }
