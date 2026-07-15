@@ -2,12 +2,7 @@ import SwiftUI
 
 extension Font {
     static func xpTahoma(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        switch weight {
-        case .bold, .semibold, .heavy, .black:
-            return .custom("Tahoma-Bold", size: size)
-        default:
-            return .custom("Tahoma", size: size)
-        }
+        .custom("Tahoma", size: size).weight(weight)
     }
 }
 
@@ -28,7 +23,6 @@ struct XPTitleBar: View {
             XPLogoView(size: 24)
             Text(title)
                 .font(.xpTahoma(size: 17, weight: .bold))
-                .fontWeight(.bold)
                 .lineLimit(1)
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.65), radius: 0, x: 1, y: 1)

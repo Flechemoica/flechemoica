@@ -327,25 +327,29 @@ private struct AccountLegalFooter: View {
     private let privacyURL = URL(string: "https://flechemoica.fr/politique-confidentialite.html")
 
     var body: some View {
-        HStack(spacing: 10) {
+        VStack(spacing: 4) {
             Text("© 2026 Flèche-moi ça")
-                .layoutPriority(1)
 
-            Spacer(minLength: 4)
+            HStack(spacing: 14) {
+                if let legalNoticeURL {
+                    Link(destination: legalNoticeURL) {
+                        Text("Mentions légales")
+                            .font(.xpTahoma(size: 13))
+                    }
+                }
 
-            if let legalNoticeURL {
-                Link("Mentions légales", destination: legalNoticeURL)
-            }
-
-            if let privacyURL {
-                Link("Politique de confidentialité", destination: privacyURL)
+                if let privacyURL {
+                    Link(destination: privacyURL) {
+                        Text("Politique de confidentialité")
+                            .font(.xpTahoma(size: 13))
+                    }
+                }
             }
         }
         .font(.xpTahoma(size: 13))
         .foregroundStyle(Color.black.opacity(0.62))
-        .multilineTextAlignment(.leading)
+        .multilineTextAlignment(.center)
         .lineLimit(1)
-        .minimumScaleFactor(0.68)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -370,10 +374,10 @@ private struct XPMenuBar: View {
             }
             Spacer()
         }
-        .font(.custom("Tahoma", size: 13))
+        .font(.xpTahoma(size: 16))
         .foregroundStyle(.black)
         .padding(.horizontal, 12)
-        .frame(height: 34)
+        .frame(height: 38)
         .background(Color.xpChrome)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color(red: 0.79, green: 0.77, blue: 0.69)).frame(height: 1)
