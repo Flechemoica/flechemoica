@@ -190,11 +190,21 @@ struct HomeView: View {
             guard !isDeletingAccount else { return }
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
+            openPendingNotificationGridIfNeeded()
         }
         .task(id: scenePhase) {
             guard scenePhase == .active, !isDeletingAccount else { return }
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
+            openPendingNotificationGridIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .weeklyGridNotificationSelected)) { notification in
+            guard let gridID = notification.userInfo?["gridID"] as? String, !gridID.isEmpty else {
+                return
+            }
+
+            PushNotificationManager.shared.clearPendingWeeklyGridID(gridID)
+            openGridFromNotification(gridID: gridID)
         }
     }
 
@@ -327,13 +337,16 @@ struct HomeView: View {
         return "\(prefix).\(safeUserID).\(safeGridID)"
     }
 
+    @MainActor
     private func loadPublishedGrids() async {
         isLoadingPublishedGrids = true
         gridLoadingMessage = nil
 
         do {
-            let snapshot = try await Firestore.firestore()
+            let database = Firestore.firestore()
+            let snapshot = try await database
                 .collection("grids")
+                .whereField("type", isEqualTo: "WeeklyGrid")
                 .whereField("status", isEqualTo: "published")
                 .limit(to: 50)
                 .getDocuments()
@@ -412,12 +425,68 @@ struct HomeView: View {
         }
     }
 
+    @MainActor
     private func openGrid(_ grid: PublishedGrid) {
+        guard grid.isPlayable else {
+            gridAccessMessage = "Cette grille est indisponible."
+            selectedGameGrid = nil
+            return
+        }
+
         if completedGridTitles.contains(grid.title) {
             UserDefaults.standard.set(true, forKey: userScopedGridStorageKey(prefix: "gridCompleted", gridID: grid.id))
         }
 
         selectedGameGrid = publishedGrids.first { $0.id == grid.id } ?? grid
+    }
+
+    @MainActor
+    private func openPendingNotificationGridIfNeeded() {
+        guard let gridID = PushNotificationManager.shared.consumePendingWeeklyGridID(), !gridID.isEmpty else {
+            return
+        }
+
+        openGridFromNotification(gridID: gridID)
+    }
+
+    @MainActor
+    private func openGridFromNotification(gridID: String) {
+        Task { @MainActor in
+            await openGridFromNotificationAsync(gridID: gridID)
+        }
+    }
+
+    @MainActor
+    private func openGridFromNotificationAsync(gridID: String) async {
+        if publishedGrids.isEmpty {
+            await loadPublishedGrids()
+        }
+
+        if let grid = publishedGrids.first(where: { $0.id == gridID }) {
+            openGrid(grid)
+            return
+        }
+
+        do {
+            let database = Firestore.firestore()
+            let snapshot = try await database.collection("grids").document(gridID).getDocument()
+            if let grid = PublishedGrid(snapshot: snapshot) {
+                guard grid.isPlayable else {
+                    gridAccessMessage = "Cette grille est indisponible."
+                    return
+                }
+
+                if !publishedGrids.contains(where: { $0.id == grid.id }) {
+                    publishedGrids.insert(grid, at: 0)
+                }
+                selectedGridIndex = publishedGrids.firstIndex(where: { $0.id == grid.id }) ?? 0
+                selectedGameGrid = grid
+            } else {
+                gridAccessMessage = "Cette grille est introuvable."
+            }
+        } catch {
+            gridAccessMessage = "Impossible d'ouvrir cette grille."
+        }
     }
 
     private func persistUnlockedGrid(id: String) {
@@ -679,14 +748,27 @@ private struct PublishedGrid: Identifiable {
     let crosswordGrid: CrosswordGrid?
 
     init?(document: QueryDocumentSnapshot) {
-        let data = document.data()
+        self.init(id: document.documentID, data: document.data())
+    }
 
+    init?(snapshot: DocumentSnapshot) {
+        guard snapshot.exists, let data = snapshot.data() else {
+            return nil
+        }
+
+        self.init(id: snapshot.documentID, data: data)
+    }
+
+    private init?(id: String, data: [String: Any]) {
         guard let title = data["title"] as? String,
               let releaseTimestamp = data["releaseAt"] as? Timestamp else {
             return nil
         }
+        guard data["type"] as? String == "WeeklyGrid" else {
+            return nil
+        }
 
-        self.id = document.documentID
+        self.id = id
         self.title = title
         self.releaseAt = releaseTimestamp.dateValue()
         self.completedPlayerCount = data["completedPlayerCount"] as? Int ?? 0
@@ -695,6 +777,11 @@ private struct PublishedGrid: Identifiable {
 
     var formattedReleaseDate: String {
         Self.releaseDateFormatter.string(from: releaseAt)
+    }
+
+    var isPlayable: Bool {
+        guard let crosswordGrid else { return false }
+        return !crosswordGrid.placedWords.isEmpty && !crosswordGrid.solutionLetters.isEmpty
     }
 
     private static let releaseDateFormatter: DateFormatter = {

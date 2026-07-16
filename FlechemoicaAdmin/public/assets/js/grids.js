@@ -230,7 +230,7 @@ const GridsView = (() => {
       setStatus("Chargement...");
       unsubscribe = firestore.collection("grids").onSnapshot(
         (snapshot) => {
-          grids = snapshot.docs;
+          grids = snapshot.docs.filter((doc) => isWeeklyGridData(doc.data()));
           renderCalendar();
           renderGrids(filterGrids());
         },
@@ -272,6 +272,25 @@ const GridsView = (() => {
     if (!firestore) {
       throw new Error("Firestore indisponible.");
     }
+  }
+
+  function legacyGridDoc(id) {
+    return firestore.collection("grids").doc(id);
+  }
+
+  async function setGridData(id, data, options = { merge: true }) {
+    await legacyGridDoc(id).set({
+      ...data,
+      type: "WeeklyGrid",
+    }, options);
+  }
+
+  async function deleteGridData(id) {
+    await legacyGridDoc(id).delete();
+  }
+
+  function isWeeklyGridData(data) {
+    return data?.type === "WeeklyGrid";
   }
 
   function renderGrids(docs) {
@@ -546,6 +565,11 @@ const GridsView = (() => {
     node.textContent = value;
   }
 
+  function getStatusForReleaseDate(releaseAt, currentStatus = "") {
+    if (normalizeStatus(currentStatus) === "blocked") return "blocked";
+    return releaseAt > new Date() ? "scheduled" : "published";
+  }
+
   async function editGridReleaseDate(id, data) {
     const currentDate = getDateFromValue(data.releaseAt);
     const currentValue = currentDate ? formatDateTimeLocal(currentDate) : formatDateTimeLocal(getNextWednesdayAt17());
@@ -558,10 +582,13 @@ const GridsView = (() => {
       return;
     }
 
+    const nextStatus = getStatusForReleaseDate(releaseAt, data.status);
+
     try {
       setStatus("Mise à jour de la date...");
-      await firestore.collection("grids").doc(id).set({
+      await setGridData(id, {
         releaseAt: firebase.firestore.Timestamp.fromDate(releaseAt),
+        status: nextStatus,
         weekId: getISOWeekID(releaseAt),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -586,7 +613,7 @@ const GridsView = (() => {
 
     try {
       setStatus(shouldBlock ? "Blocage de l'accès..." : "Déblocage de l'accès...");
-      await firestore.collection("grids").doc(id).set({
+      await setGridData(id, {
         status: shouldBlock ? "blocked" : restoredStatus,
         accessBlockedAt: shouldBlock ? firebase.firestore.FieldValue.serverTimestamp() : firebase.firestore.FieldValue.delete(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -609,7 +636,7 @@ const GridsView = (() => {
 
     try {
       setStatus("Suppression...");
-      await firestore.collection("grids").doc(id).delete();
+      await deleteGridData(id);
       setStatus("Grille supprimée.");
       if (currentDetailID === id) {
         currentDetailID = "";
@@ -773,7 +800,7 @@ const GridsView = (() => {
     const now = new Date();
     try {
       setDetailStatus("Publication...");
-      await firestore.collection("grids").doc(id).set({
+      await setGridData(id, {
         status: "published",
         releaseAt: firebase.firestore.Timestamp.fromDate(now),
         weekId: getISOWeekID(now),
@@ -796,6 +823,7 @@ const GridsView = (() => {
 
     const snapshot = await firestore.collection("grids").doc(gridID).get();
     if (!snapshot.exists) throw new Error("Grille introuvable.");
+    if (!isWeeklyGridData(snapshot.data())) throw new Error("Grille hebdomadaire introuvable.");
     return snapshot;
   }
 
@@ -934,11 +962,14 @@ const GridsView = (() => {
       return;
     }
 
+    const nextStatus = getStatusForReleaseDate(releaseAt, currentDetailData.data.status);
+
     try {
       setDetailStatus("Enregistrement...");
-      await firestore.collection("grids").doc(currentDetailData.id).set({
+      await setGridData(currentDetailData.id, {
         placedWords: nextWords,
         releaseAt: firebase.firestore.Timestamp.fromDate(releaseAt),
+        status: nextStatus,
         weekId: getISOWeekID(releaseAt),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -946,11 +977,12 @@ const GridsView = (() => {
       currentDetailData.placedWords = nextWords;
       currentDetailData.grid.placedWords = nextWords;
       currentDetailData.data.releaseAt = firebase.firestore.Timestamp.fromDate(releaseAt);
+      currentDetailData.data.status = nextStatus;
       currentDetailData.data.weekId = getISOWeekID(releaseAt);
       if (detailMeta) {
         detailMeta.textContent = `ID : ${currentDetailData.id}`;
       }
-      renderStatusBadge(detailStatusBadge, currentDetailData.data.status || "-");
+      renderStatusBadge(detailStatusBadge, nextStatus || "-");
       renderGridPreview(currentDetailData.grid);
     } catch (error) {
       setDetailStatus(error.message || "Impossible d'enregistrer les corrections.", "error");
@@ -974,7 +1006,7 @@ const GridsView = (() => {
       if (!shouldReplace) return;
 
       setDetailStatus("Remplacement de la grille...");
-      await firestore.collection("grids").doc(currentDetailData.id).set({
+      await setGridData(currentDetailData.id, {
         blackCells: Array.isArray(grid.blackCells) ? grid.blackCells : [],
         name: grid.name || currentDetailData.grid.name || currentDetailData.data.title || "",
         placedWords: grid.placedWords,
@@ -1082,15 +1114,18 @@ const GridsView = (() => {
       if (!Array.isArray(grid.placedWords)) throw new Error("Le JSON doit contenir placedWords.");
 
       setStatus("Ajout de la grille...");
-      await firestore.collection("grids").add({
+      const gridData = {
         ...grid,
         title,
+        type: "WeeklyGrid",
         status: "scheduled",
         weekId: getISOWeekID(releaseAt),
         releaseAt: firebase.firestore.Timestamp.fromDate(releaseAt),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      const docRef = firestore.collection("grids").doc();
+      await docRef.set(gridData);
 
       importForm.reset();
       hideImportForm();

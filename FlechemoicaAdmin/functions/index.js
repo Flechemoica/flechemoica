@@ -10,6 +10,16 @@ initializeApp();
 
 const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
 const WEEKLY_GRIDS_TOPIC = "weekly_grids";
+const ALL_USERS_TOPIC = "all_users";
+const GRIDS_COLLECTION = "grids";
+const WEEKLY_GRID_TYPE = "WeeklyGrid";
+const NOTIFICATION_LOGS_COLLECTION = "notificationLogs";
+const EXPIRATION_UNIT_SECONDS = {
+  minutes: 60,
+  hours: 60 * 60,
+  days: 24 * 60 * 60,
+  weeks: 7 * 24 * 60 * 60,
+};
 
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
@@ -21,6 +31,54 @@ function requireString(value, fieldName) {
     throw new HttpsError("invalid-argument", `${fieldName} est requis.`);
   }
   return normalized;
+}
+
+function normalizeNotificationOptions(data = {}) {
+  const sound = String(data.sound || "disabled") === "default" ? "default" : "disabled";
+  const badge = String(data.badge || "disabled") === "1" ? 1 : null;
+  const expiration = data.expiration || {};
+  const expirationValue = Number.parseInt(String(expiration.value || "4"), 10);
+  const expirationUnit = String(expiration.unit || "weeks");
+  const unitSeconds = EXPIRATION_UNIT_SECONDS[expirationUnit] || EXPIRATION_UNIT_SECONDS.weeks;
+  const safeExpirationValue = Number.isFinite(expirationValue)
+    ? Math.min(Math.max(expirationValue, 0), 365)
+    : 4;
+
+  return {
+    sound,
+    badge,
+    expirationValue: safeExpirationValue,
+    expirationUnit: EXPIRATION_UNIT_SECONDS[expirationUnit] ? expirationUnit : "weeks",
+    expirationSeconds: safeExpirationValue * unitSeconds,
+  };
+}
+
+function buildApnsConfig(options = {}) {
+  const aps = {};
+
+  if (options.sound === "default") {
+    aps.sound = "default";
+  }
+
+  if (Number.isInteger(options.badge)) {
+    aps.badge = options.badge;
+  }
+
+  const apns = {
+    payload: { aps },
+  };
+
+  if (Number.isFinite(options.expirationSeconds) && options.expirationSeconds > 0) {
+    apns.headers = {
+      "apns-expiration": String(Math.floor(Date.now() / 1000) + options.expirationSeconds),
+    };
+  } else {
+    apns.headers = {
+      "apns-expiration": "0",
+    };
+  }
+
+  return apns;
 }
 
 async function assertEditor(uid) {
@@ -48,17 +106,18 @@ async function getTargetUser(targetDocId) {
 }
 
 async function sendWeeklyGridNotification(gridID, gridData) {
-  const title = String(gridData.title || gridData.name || "Nouvelle grille").trim();
-
-  await getMessaging().send({
+  const messageID = await getMessaging().send({
     topic: WEEKLY_GRIDS_TOPIC,
     notification: {
-      title: "Nouvelle grille disponible",
-      body: `${title} est disponible.`,
+      title: "Flèche-moi ça",
+      body: "La grille de la semaine est disponible !",
     },
     data: {
       type: "weekly_grid_published",
       gridID,
+      collection: GRIDS_COLLECTION,
+      gridType: WEEKLY_GRID_TYPE,
+      route: `weekly-grid/${gridID}`,
     },
     apns: {
       payload: {
@@ -68,6 +127,104 @@ async function sendWeeklyGridNotification(gridID, gridData) {
       },
     },
   });
+
+  await getFirestore().collection(NOTIFICATION_LOGS_COLLECTION).add({
+    kind: "weekly_grid",
+    target: "topic",
+    topic: WEEKLY_GRIDS_TOPIC,
+    title: "Flèche-moi ça",
+    body: "La grille de la semaine est disponible !",
+    gridID,
+    gridType: WEEKLY_GRID_TYPE,
+    status: "sent",
+    fcmMessageID: messageID,
+    sentAt: FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
+async function sendTopicNotification({ title, body, topic, data = {}, options = {} }) {
+  return getMessaging().send({
+    topic,
+    notification: { title, body },
+    data,
+    apns: buildApnsConfig(options),
+  });
+}
+
+async function sendScheduledAdminNotifications() {
+  const db = getFirestore();
+  const now = Timestamp.now();
+  const snapshot = await db
+    .collection(NOTIFICATION_LOGS_COLLECTION)
+    .where("status", "==", "scheduled")
+    .limit(100)
+    .get();
+
+  const dueDocs = snapshot.docs.filter((doc) => {
+    const scheduledAt = doc.get("scheduledAt");
+    return scheduledAt && scheduledAt.toMillis && scheduledAt.toMillis() <= now.toMillis();
+  });
+
+  await Promise.all(dueDocs.map(async (doc) => {
+    const data = doc.data();
+    try {
+      const messageID = await sendTopicNotification({
+        title: String(data.title || "Flèche-moi ça"),
+        body: String(data.body || ""),
+        topic: String(data.topic || ALL_USERS_TOPIC),
+        data: {
+          type: "admin_notification",
+          notificationID: doc.id,
+        },
+        options: normalizeNotificationOptions(data),
+      });
+
+      await doc.ref.set({
+        status: "sent",
+        fcmMessageID: messageID,
+        sentAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (error) {
+      await doc.ref.set({
+        status: "failed",
+        errorMessage: error.message || "Erreur inconnue",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }));
+}
+
+async function publishDueGrids(collectionName) {
+  const db = getFirestore();
+  const now = Timestamp.now();
+  const snapshot = await db
+    .collection(collectionName)
+    .where("status", "==", "scheduled")
+    .limit(500)
+    .get();
+
+  if (snapshot.empty) return 0;
+
+  const batch = db.batch();
+  const dueDocs = snapshot.docs.filter((doc) => {
+    const releaseAt = doc.get("releaseAt");
+    return releaseAt && releaseAt.toMillis && releaseAt.toMillis() <= now.toMillis();
+  });
+
+  if (!dueDocs.length) return 0;
+
+  dueDocs.forEach((doc) => {
+    batch.update(doc.ref, {
+      status: "published",
+      publishedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+
+  await batch.commit();
+  return dueDocs.length;
 }
 
 exports.adminUserAction = onCall({ region: "europe-west1" }, async (request) => {
@@ -155,6 +312,84 @@ exports.adminUsersMeta = onCall({ region: "europe-west1" }, async (request) => {
   };
 });
 
+exports.sendAdminNotification = onCall({ region: "europe-west1" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Connexion requise.");
+  }
+
+  await assertEditor(request.auth.uid);
+
+  const title = requireString(request.data?.title || "Flèche-moi ça", "Titre").slice(0, 100);
+  const body = requireString(request.data?.body, "Texte").slice(0, 240);
+  const scheduledAtValue = String(request.data?.scheduledAt || "").trim();
+  const notificationOptions = normalizeNotificationOptions(request.data || {});
+  const db = getFirestore();
+  const now = Timestamp.now();
+  const logRef = db.collection(NOTIFICATION_LOGS_COLLECTION).doc();
+
+  const baseLog = {
+    kind: "admin_manual",
+    target: "topic",
+    topic: ALL_USERS_TOPIC,
+    title,
+    body,
+    sound: notificationOptions.sound,
+    badge: notificationOptions.badge || "disabled",
+    expirationValue: notificationOptions.expirationValue,
+    expirationUnit: notificationOptions.expirationUnit,
+    expirationSeconds: notificationOptions.expirationSeconds,
+    createdBy: request.auth.uid,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (scheduledAtValue) {
+    const scheduledDate = new Date(scheduledAtValue);
+    if (!Number.isFinite(scheduledDate.getTime())) {
+      throw new HttpsError("invalid-argument", "Date de programmation invalide.");
+    }
+
+    const scheduledAt = Timestamp.fromDate(scheduledDate);
+    if (scheduledAt.toMillis() > now.toMillis()) {
+      await logRef.set({
+        ...baseLog,
+        status: "scheduled",
+        scheduledAt,
+      });
+      return { ok: true, notificationID: logRef.id, status: "scheduled" };
+    }
+  }
+
+  try {
+    const messageID = await sendTopicNotification({
+      title,
+      body,
+      topic: ALL_USERS_TOPIC,
+      data: {
+        type: "admin_notification",
+        notificationID: logRef.id,
+      },
+      options: notificationOptions,
+    });
+
+    await logRef.set({
+      ...baseLog,
+      status: "sent",
+      fcmMessageID: messageID,
+      sentAt: FieldValue.serverTimestamp(),
+    });
+
+    return { ok: true, notificationID: logRef.id, status: "sent", messageID };
+  } catch (error) {
+    await logRef.set({
+      ...baseLog,
+      status: "failed",
+      errorMessage: error.message || "Erreur inconnue",
+    });
+    throw new HttpsError("internal", error.message || "Impossible d'envoyer la notification.");
+  }
+});
+
 exports.publishScheduledGrids = onSchedule(
   {
     region: "europe-west1",
@@ -162,40 +397,17 @@ exports.publishScheduledGrids = onSchedule(
     timeZone: "Europe/Paris",
   },
   async () => {
-    const db = getFirestore();
-    const now = Timestamp.now();
-    const snapshot = await db
-      .collection("grids")
-      .where("status", "==", "scheduled")
-      .limit(500)
-      .get();
-
-    if (snapshot.empty) return;
-
-    const batch = db.batch();
-    const dueDocs = snapshot.docs.filter((doc) => {
-      const releaseAt = doc.get("releaseAt");
-      return releaseAt && releaseAt.toMillis && releaseAt.toMillis() <= now.toMillis();
-    });
-
-    if (!dueDocs.length) return;
-
-    dueDocs.forEach((doc) => {
-      batch.update(doc.ref, {
-        status: "published",
-        publishedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-    });
-
-    await batch.commit();
+    await Promise.all([
+      publishDueGrids(GRIDS_COLLECTION),
+      sendScheduledAdminNotifications(),
+    ]);
   }
 );
 
 exports.notifyWeeklyGridPublished = onDocumentUpdated(
   {
     region: "europe-west1",
-    document: "grids/{gridID}",
+    document: `${GRIDS_COLLECTION}/{gridID}`,
   },
   async (event) => {
     const before = event.data?.before?.data();
@@ -204,6 +416,7 @@ exports.notifyWeeklyGridPublished = onDocumentUpdated(
     if (!before || !after) return;
     if (normalizeStatus(before.status) === "published") return;
     if (normalizeStatus(after.status) !== "published") return;
+    if (after.type !== WEEKLY_GRID_TYPE) return;
 
     await sendWeeklyGridNotification(event.params.gridID, after);
     await event.data.after.ref.set({

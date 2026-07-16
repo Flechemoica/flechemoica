@@ -9,12 +9,18 @@ import UserNotifications
 import FirebaseMessaging
 #endif
 
+extension Notification.Name {
+    static let weeklyGridNotificationSelected = Notification.Name("weeklyGridNotificationSelected")
+}
+
 final class PushNotificationManager: NSObject {
     static let shared = PushNotificationManager()
 
-    private let topic = "weekly_grids"
+    private let weeklyGridsTopic = "weekly_grids"
+    private let allUsersTopic = "all_users"
     private var currentUserID: String?
     private var configuredUserIDs = Set<String>()
+    private var pendingWeeklyGridID: String?
 
     private override init() {
         super.init()
@@ -39,8 +45,22 @@ final class PushNotificationManager: NSObject {
 
         Task {
             await requestAuthorizationAndRegister()
-            subscribeToWeeklyGridsTopic()
+            subscribeToNotificationTopics()
             refreshFCMToken()
+        }
+    }
+
+    @MainActor
+    func consumePendingWeeklyGridID() -> String? {
+        let gridID = pendingWeeklyGridID
+        pendingWeeklyGridID = nil
+        return gridID
+    }
+
+    @MainActor
+    func clearPendingWeeklyGridID(_ gridID: String) {
+        if pendingWeeklyGridID == gridID {
+            pendingWeeklyGridID = nil
         }
     }
 
@@ -60,9 +80,10 @@ final class PushNotificationManager: NSObject {
         }
     }
 
-    private func subscribeToWeeklyGridsTopic() {
+    private func subscribeToNotificationTopics() {
         #if canImport(FirebaseMessaging)
-        Messaging.messaging().subscribe(toTopic: topic) { _ in }
+        Messaging.messaging().subscribe(toTopic: weeklyGridsTopic) { _ in }
+        Messaging.messaging().subscribe(toTopic: allUsersTopic) { _ in }
         #endif
     }
 
@@ -87,11 +108,22 @@ final class PushNotificationManager: NSObject {
                 "fcmTokens": FieldValue.arrayUnion([token]),
                 "notifications": [
                     "weeklyGrids": true,
-                    "topic": topic
+                    "allUsers": true,
+                    "topics": [weeklyGridsTopic, allUsersTopic]
                 ],
                 "notificationsUpdatedAt": FieldValue.serverTimestamp(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
+    }
+
+    @MainActor
+    fileprivate func handleWeeklyGridNotificationSelection(gridID: String) {
+        pendingWeeklyGridID = gridID
+        NotificationCenter.default.post(
+            name: .weeklyGridNotificationSelected,
+            object: nil,
+            userInfo: ["gridID": gridID]
+        )
     }
 }
 
@@ -101,6 +133,20 @@ extension PushNotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .list, .sound]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let userInfo = response.notification.request.content.userInfo
+        guard let gridID = userInfo["gridID"] as? String, !gridID.isEmpty else {
+            return
+        }
+
+        await MainActor.run {
+            PushNotificationManager.shared.handleWeeklyGridNotificationSelection(gridID: gridID)
+        }
     }
 }
 

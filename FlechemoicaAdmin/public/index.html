@@ -6,7 +6,7 @@
     <title>Flèche-moi ça - Administration</title>
     <link rel="stylesheet" href="/assets/css/global.css?v=20260716-2140">
     <link rel="stylesheet" href="/assets/css/login.css?v=20260716-2140">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-2340">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-2255">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
@@ -17,7 +17,8 @@
     <script defer src="/assets/js/login.js?v=20260716-1900"></script>
     <script defer src="/assets/js/users.js?v=20260716-2340"></script>
     <script defer src="/assets/js/grids.js?v=20260716-2340"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-2120"></script>
+    <script defer src="/assets/js/notifications.js?v=20260716-2315"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-2305"></script>
     <script defer src="/assets/js/app.js?v=20260716-1900"></script>
   </head>
   <body>
@@ -77,6 +78,7 @@
             <button class="nav-item is-active" type="button" data-panel-target="overview-panel">Vue générale</button>
             <button class="nav-item" type="button" data-panel-target="users-panel">Utilisateurs</button>
             <button class="nav-item" type="button" data-panel-target="grids-panel">Grilles hebdomadaires</button>
+            <button class="nav-item" type="button" data-panel-target="notifications-panel">Notifications</button>
             <button class="nav-item" type="button" data-panel-target="accounting-panel">Comptabilité</button>
           </nav>
 
@@ -90,6 +92,8 @@
             <div class="workspace-panel is-hidden" id="grids-panel" data-view-src="/grids.html"></div>
 
             <div class="workspace-panel is-hidden" id="grid-detail-panel" data-view-src="/grid-detail.html"></div>
+
+            <div class="workspace-panel is-hidden" id="notifications-panel" data-view-src="/partials/notifications.html"></div>
 
             <div class="workspace-panel is-hidden" id="accounting-panel">
               <div class="workspace-header">

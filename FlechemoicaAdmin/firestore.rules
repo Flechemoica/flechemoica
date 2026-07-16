@@ -66,6 +66,11 @@ service cloud.firestore {
       allow write: if isEditor();
     }
 
+    match /notificationLogs/{notificationId} {
+      allow read: if isEditor();
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

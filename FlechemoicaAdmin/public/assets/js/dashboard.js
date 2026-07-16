@@ -10,6 +10,7 @@ const DashboardView = (() => {
     "overview-panel": "/",
     "users-panel": "/user.html",
     "grids-panel": "/grille.html",
+    "notifications-panel": "/notifications.html",
     "accounting-panel": "/comptabilite.html",
   };
   const routePanels = Object.fromEntries(
@@ -41,6 +42,12 @@ const DashboardView = (() => {
       GridsView.stop();
     }
 
+    if (panelID === "notifications-panel") {
+      NotificationsView.start();
+    } else {
+      NotificationsView.stop();
+    }
+
     if (options.push !== false) {
       pushRoute(panelID);
     }
@@ -52,6 +59,7 @@ const DashboardView = (() => {
     accountEmail.textContent = "";
     UsersView.stop();
     GridsView.stop();
+    NotificationsView.stop();
   }
 
   function showDashboard(user) {
@@ -72,6 +80,7 @@ const DashboardView = (() => {
   function init() {
     UsersView.init();
     GridsView.init();
+    NotificationsView.init();
 
     navItems.forEach((item) => {
       item.addEventListener("click", () => {
@@ -95,6 +104,11 @@ const DashboardView = (() => {
   }
 
   function getPanelFromPath() {
+    const requestedPanel = new URLSearchParams(window.location.search).get("panel");
+    if (requestedPanel === "notifications") {
+      return "notifications-panel";
+    }
+
     if (/^\/user\/[^/]+\.html$/.test(window.location.pathname)) {
       return "user-detail-panel";
     }
@@ -108,7 +122,8 @@ const DashboardView = (() => {
 
   function pushRoute(panelID) {
     const path = panelRoutes[panelID] || "/";
-    if (window.location.pathname === path) return;
+    const currentPath = `${window.location.pathname}${window.location.search}`;
+    if (currentPath === path) return;
     window.history.pushState({ panelID }, "", path);
   }
 

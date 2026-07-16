@@ -1,0 +1,76 @@
+<div class="workspace-header workspace-header-row">
+  <div>
+    <h2>Notifications</h2>
+  </div>
+  <div class="users-toolbar grids-toolbar">
+    <button class="primary-button compact-button" id="add-notification-button" type="button">+</button>
+    <p class="panel-status" id="notifications-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+
+<form class="import-panel is-hidden" id="notification-form">
+  <div class="field-row">
+    <div class="field-group">
+      <label for="notification-title">Titre</label>
+      <input id="notification-title" type="text" value="Flèche-moi ça" required>
+    </div>
+    <div class="field-group">
+      <label for="notification-scheduled-at">Programmer</label>
+      <input id="notification-scheduled-at" type="datetime-local">
+    </div>
+  </div>
+  <div class="field-group">
+    <label for="notification-body">Texte</label>
+    <textarea id="notification-body" rows="4" placeholder="Votre message" required></textarea>
+  </div>
+  <div class="field-row">
+    <div class="field-group">
+      <label for="notification-sound">Son</label>
+      <select id="notification-sound">
+        <option value="disabled" selected>Désactivé</option>
+        <option value="default">Activé</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label for="notification-badge">Badge Apple</label>
+      <select id="notification-badge">
+        <option value="disabled" selected>Désactivé</option>
+        <option value="1">Activé</option>
+      </select>
+    </div>
+  </div>
+  <div class="field-row">
+    <div class="field-group">
+      <label for="notification-expiration-value">Délai d'expiration</label>
+      <input id="notification-expiration-value" type="number" min="0" max="365" step="1" value="4">
+    </div>
+    <div class="field-group">
+      <label for="notification-expiration-unit">Unité</label>
+      <select id="notification-expiration-unit">
+        <option value="minutes">Minutes</option>
+        <option value="hours">Heures</option>
+        <option value="days">Jours</option>
+        <option value="weeks" selected>Semaine</option>
+      </select>
+    </div>
+  </div>
+  <div class="button-row">
+    <button class="primary-button" type="submit">Envoyer</button>
+    <button class="ghost-button" id="notification-cancel" type="button">Annuler</button>
+  </div>
+</form>
+
+<div class="users-table-shell">
+  <table class="users-table">
+    <thead>
+      <tr>
+        <th>Titre</th>
+        <th>Texte</th>
+        <th>Statut</th>
+        <th>Programmée</th>
+        <th>Envoyée</th>
+      </tr>
+    </thead>
+    <tbody id="notifications-table-body"></tbody>
+  </table>
+</div>
