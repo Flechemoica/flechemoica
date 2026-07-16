@@ -158,7 +158,7 @@ exports.adminUsersMeta = onCall({ region: "europe-west1" }, async (request) => {
 exports.publishScheduledGrids = onSchedule(
   {
     region: "europe-west1",
-    schedule: "0 * * * *",
+    schedule: "* * * * *",
     timeZone: "Europe/Paris",
   },
   async () => {
@@ -167,14 +167,20 @@ exports.publishScheduledGrids = onSchedule(
     const snapshot = await db
       .collection("grids")
       .where("status", "==", "scheduled")
-      .where("releaseAt", "<=", now)
-      .limit(50)
+      .limit(500)
       .get();
 
     if (snapshot.empty) return;
 
     const batch = db.batch();
-    snapshot.docs.forEach((doc) => {
+    const dueDocs = snapshot.docs.filter((doc) => {
+      const releaseAt = doc.get("releaseAt");
+      return releaseAt && releaseAt.toMillis && releaseAt.toMillis() <= now.toMillis();
+    });
+
+    if (!dueDocs.length) return;
+
+    dueDocs.forEach((doc) => {
       batch.update(doc.ref, {
         status: "published",
         publishedAt: FieldValue.serverTimestamp(),
