@@ -1,0 +1,23 @@
+<div class="workspace-header workspace-header-row">
+  <div>
+    <h2>Utilisateurs</h2>
+  </div>
+  <div class="users-toolbar">
+    <label class="sr-only" for="users-search">Rechercher un utilisateur</label>
+    <input id="users-search" type="search" placeholder="Rechercher" autocomplete="off">
+    <p class="panel-status" id="users-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+<div class="users-table-shell">
+  <table class="users-table">
+    <thead>
+      <tr>
+        <th>Nom d'utilisateur</th>
+        <th>E-mail</th>
+        <th class="role-column">Rôle</th>
+        <th>Création</th>
+      </tr>
+    </thead>
+    <tbody id="users-table-body"></tbody>
+  </table>
+</div>

@@ -42,21 +42,23 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if ownUserDoc(userId) || isEditor();
+      allow get: if (request.auth != null && request.auth.uid == userId) || isEditor();
       allow list: if isEditor();
 
-      allow create: if ownUserDoc(userId)
+      allow create: if request.auth != null
+        && request.auth.uid == userId
         && requestedUserIdMatches(userId)
         && doesNotGrantEditorAccess();
 
       allow update: if isEditor()
         || (
-          ownUserDoc(userId)
+          request.auth != null
+          && request.auth.uid == userId
           && requestedUserIdMatches(userId)
           && doesNotGrantEditorAccess()
         );
 
-      allow delete: if ownUserDoc(userId) || isEditor();
+      allow delete: if (request.auth != null && request.auth.uid == userId) || isEditor();
     }
 
     match /grids/{gridId} {

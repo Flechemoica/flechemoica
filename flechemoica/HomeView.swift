@@ -2495,7 +2495,7 @@ private struct ProfileSettingsContent: View {
             VStack(alignment: .leading, spacing: 12) {
                 ProfileReadOnlyField(text: savedEmail, prompt: "E-mail")
                 ProfileTextField(text: $newEmail, prompt: "Nouvel e-mail", keyboard: .emailAddress, textContentType: .emailAddress)
-                ProfileSecureField(text: $currentPassword, prompt: "Mot de passe", textContentType: .oneTimeCode)
+                ProfileSecureField(text: $currentPassword, prompt: "Mot de passe", textContentType: nil)
                 Button(isSubmitting ? "Enregistrement..." : "Changer l'e-mail") {
                     changeEmailTapped()
                 }
@@ -2506,9 +2506,9 @@ private struct ProfileSettingsContent: View {
             }
         case .password:
             VStack(alignment: .leading, spacing: 12) {
-                ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe", textContentType: .oneTimeCode)
-                ProfileSecureField(text: $newPassword, prompt: "Nouveau mot de passe", textContentType: .oneTimeCode)
-                ProfileSecureField(text: $confirmPassword, prompt: "Confirmation", textContentType: .oneTimeCode)
+                ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe", textContentType: nil)
+                ProfileSecureField(text: $newPassword, prompt: "Nouveau mot de passe", textContentType: nil)
+                ProfileSecureField(text: $confirmPassword, prompt: "Confirmation", textContentType: nil)
                 savePanelButton(title: "Changer le mot de passe")
             }
         case .deleteAccount:
@@ -2518,7 +2518,7 @@ private struct ProfileSettingsContent: View {
                     isAppleAccount ? "Une confirmation Apple sera demandee pour supprimer le compte." : "Entre ton mot de passe actuel pour confirmer."
                 ])
                 if !isAppleAccount {
-                    ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe", textContentType: .oneTimeCode)
+                    ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe", textContentType: nil)
                 }
                 Button("Supprimer le compte") {
                     requestAccountDeletionConfirmation()

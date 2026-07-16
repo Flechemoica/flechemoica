@@ -61,7 +61,11 @@ struct ContentView: View {
 
         currentUser = Auth.auth().currentUser
         authStateHandle = Auth.auth().addStateDidChangeListener { _, user in
-            currentUser = user
+            if user == nil {
+                currentUser = nil
+            } else if currentUser != nil {
+                currentUser = user
+            }
         }
     }
 

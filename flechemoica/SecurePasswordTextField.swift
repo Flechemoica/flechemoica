@@ -5,10 +5,11 @@ struct SecurePasswordTextField: UIViewRepresentable {
     @Binding var text: String
 
     let placeholder: String
-    var textContentType: UITextContentType? = .password
+    var textContentType: UITextContentType?
 
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
         textField.textContentType = textContentType
         textField.isSecureTextEntry = true
         textField.autocorrectionType = .no
@@ -59,6 +60,11 @@ struct SecurePasswordTextField: UIViewRepresentable {
 
         @objc func textDidChange(_ textField: UITextField) {
             text = textField.text ?? ""
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return true
         }
     }
 }

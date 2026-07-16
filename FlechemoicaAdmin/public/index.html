@@ -3,18 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Flèche-moi ça - Accès éditeur</title>
+    <title>Flèche-moi ça - Administration</title>
     <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1500">
     <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1548">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1500">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1745">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
     <script defer src="/__/firebase/init.js"></script>
     <script defer src="/assets/js/auth.js?v=20260716-1500"></script>
-    <script defer src="/assets/js/login.js?v=20260716-1500"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-1500"></script>
+    <script defer src="/assets/js/login.js?v=20260716-1655"></script>
+    <script defer src="/assets/js/users.js?v=20260716-1745"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-1720"></script>
     <script defer src="/assets/js/app.js?v=20260716-1502"></script>
   </head>
   <body>
@@ -25,7 +26,7 @@
             <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
             <div>
               <h1 id="login-title">FLÈCHE-MOI ÇA</h1>
-              <p class="eyebrow">Accès éditeur</p>
+              <p class="eyebrow">Administration</p>
             </div>
           </div>
         </header>
@@ -54,9 +55,14 @@
 
       <section class="dashboard-view is-hidden" id="dashboard-view" aria-labelledby="dashboard-title">
         <header class="topbar">
-          <div>
-            <p class="eyebrow">Administration</p>
-            <h1 id="dashboard-title">Tableau de bord</h1>
+          <div class="topbar-brand">
+            <div class="brand-lockup" aria-label="Flèche-moi ça Administration">
+              <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
+              <div>
+                <h1 id="dashboard-title">FLÈCHE-MOI ÇA</h1>
+                <p class="eyebrow">Administration</p>
+              </div>
+            </div>
           </div>
           <div class="account-box">
             <span id="account-email"></span>
@@ -66,26 +72,27 @@
 
         <div class="dashboard-grid">
           <nav class="sidebar" aria-label="Navigation principale">
-            <button class="nav-item is-active" type="button">Vue générale</button>
-            <button class="nav-item" type="button">Utilisateurs</button>
-            <button class="nav-item" type="button">Contenus</button>
-            <button class="nav-item" type="button">Import JSON</button>
+            <button class="nav-item is-active" type="button" data-panel-target="overview-panel">Vue générale</button>
+            <button class="nav-item" type="button" data-panel-target="users-panel">Utilisateurs</button>
+            <button class="nav-item" type="button" data-panel-target="grids-panel">Grilles</button>
+            <button class="nav-item" type="button" data-panel-target="accounting-panel">Comptabilité</button>
           </nav>
 
           <section class="workspace">
-            <div class="workspace-header">
-              <p class="eyebrow">Session Editor</p>
-              <h2>Bienvenue dans l'ERP</h2>
+            <div class="workspace-panel" id="overview-panel"></div>
+
+            <div class="workspace-panel is-hidden" id="users-panel" data-view-src="/users.html"></div>
+
+            <div class="workspace-panel is-hidden" id="grids-panel">
+              <div class="workspace-header">
+                <h2>Grilles</h2>
+              </div>
             </div>
-            <div class="metric-row">
-              <article class="metric-card">
-                <span class="metric-label">Accès</span>
-                <strong>Éditeur</strong>
-              </article>
-              <article class="metric-card">
-                <span class="metric-label">Projet</span>
-                <strong>Flèche-moi ça</strong>
-              </article>
+
+            <div class="workspace-panel is-hidden" id="accounting-panel">
+              <div class="workspace-header">
+                <h2>Comptabilité</h2>
+              </div>
             </div>
           </section>
         </div>

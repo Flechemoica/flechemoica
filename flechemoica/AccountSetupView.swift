@@ -60,7 +60,7 @@ struct AccountSetupView: View {
                                     XPLogoView(size: 86)
 
                                     VStack(alignment: .leading, spacing: 0) {
-                                        Text("FLÈCHE")
+                                        Text("FLÈCHE-")
                                         Text("MOI ÇA")
                                     }
                                     .font(.system(size: 25, weight: .bold).italic())
@@ -80,7 +80,7 @@ struct AccountSetupView: View {
                                     XPSecureField(
                                         text: $password,
                                         prompt: "Mot de Passe",
-                                        textContentType: .oneTimeCode
+                                        textContentType: nil
                                     )
 
                                     if authMode == .signUp {
@@ -124,9 +124,10 @@ struct AccountSetupView: View {
                                         Button {
                                             signInWithGoogleTapped()
                                         } label: {
-                                            Text("G")
-                                                .font(.system(size: 23, weight: .bold))
-                                                .foregroundStyle(Color(red: 0.26, green: 0.52, blue: 0.96))
+                                            Image("GoogleG")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 25, height: 25)
                                                 .frame(width: 44, height: 44)
                                                 .background(Color.white)
                                                 .overlay(Rectangle().stroke(Color.black.opacity(0.28), lineWidth: 1))
@@ -277,17 +278,12 @@ struct AccountSetupView: View {
         changeRequest.displayName = pseudo.trimmingCharacters(in: .whitespacesAndNewlines)
         changeRequest.photoURL = selectedAvatarURL
         try await changeRequest.commitChanges()
-        saveUserProfileInBackground(for: result.user)
+        _ = try await result.user.getIDTokenResult(forcingRefresh: true)
+        try await saveUserProfile(for: result.user)
 
         await MainActor.run {
             isSubmitting = false
             onAuthenticated(result.user)
-        }
-    }
-
-    private func saveUserProfileInBackground(for user: User) {
-        Task {
-            try? await saveUserProfile(for: user)
         }
     }
 
@@ -307,7 +303,8 @@ struct AccountSetupView: View {
                 "pseudo": trimmedPseudo,
                 "pseudoKey": pseudoKey,
                 "avatarID": selectedAvatarID,
-                "createdAt": FieldValue.serverTimestamp()
+                "createdAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
 
     }

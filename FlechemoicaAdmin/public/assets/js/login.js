@@ -68,7 +68,7 @@ const LoginView = (() => {
       }
 
       setLoading(true);
-      setMessage("Verification du statut Editor...");
+      setMessage("Vérification de l'accès Administration...");
 
       try {
         await AuthGate.signIn(normalizedEmail, passwordInput.value);
