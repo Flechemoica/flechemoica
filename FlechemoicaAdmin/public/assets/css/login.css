@@ -4,11 +4,7 @@
   justify-content: center;
   min-height: 100vh;
   padding: 32px;
-  background:
-    linear-gradient(135deg, rgba(35, 48, 68, 0.72), rgba(31, 122, 82, 0.48)),
-    url("https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1600&q=80");
-  background-position: center;
-  background-size: cover;
+  background: rgb(199, 177, 250);
 }
 
 .login-card {
