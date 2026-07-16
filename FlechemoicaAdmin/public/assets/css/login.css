@@ -36,6 +36,7 @@
 
 .brand-lockup .eyebrow {
   margin: 4px 0 0;
+  color: var(--accent);
 }
 
 .brand-lockup h1 {
@@ -114,6 +115,13 @@
 .login-card .primary-button {
   width: 100%;
   margin-top: 24px;
+  background: var(--accent);
+  color: #000000;
+}
+
+.login-card .primary-button:hover {
+  background: var(--accent-dark);
+  color: #000000;
 }
 
 .form-message {
