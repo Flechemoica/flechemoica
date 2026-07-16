@@ -4,56 +4,33 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Flèche-moi ça | ERP</title>
-    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1439">
-    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1439">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1439">
+    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1450">
+    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1450">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1450">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
     <script defer src="/__/firebase/init.js"></script>
-    <script defer src="/assets/js/auth.js?v=20260716-1439"></script>
-    <script defer src="/assets/js/login.js?v=20260716-1439"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-1439"></script>
-    <script defer src="/assets/js/app.js?v=20260716-1439"></script>
+    <script defer src="/assets/js/auth.js?v=20260716-1450"></script>
+    <script defer src="/assets/js/login.js?v=20260716-1450"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-1450"></script>
+    <script defer src="/assets/js/app.js?v=20260716-1450"></script>
   </head>
   <body>
     <main class="shell">
       <section class="login-view" id="login-view" aria-labelledby="login-title">
         <header class="login-header">
           <div class="brand-lockup" aria-label="Flèche-moi ça ERP">
-            <span class="brand-mark">F</span>
+            <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
             <div>
-              <p class="eyebrow">ERP interne</p>
               <h1 id="login-title">Flèche-moi ça</h1>
+              <p class="eyebrow">Accès Editor</p>
             </div>
-          </div>
-          <div class="access-state">
-            <span class="state-dot" aria-hidden="true"></span>
-            <span>Accès Editor</span>
           </div>
         </header>
 
         <div class="login-layout">
-          <aside class="access-panel" aria-label="Contexte de connexion">
-            <p class="panel-kicker">Console d'administration</p>
-            <h2>Gestion des grilles et des comptes</h2>
-            <dl class="access-list">
-              <div>
-                <dt>Projet</dt>
-                <dd>flechemoica</dd>
-              </div>
-              <div>
-                <dt>Rôle requis</dt>
-                <dd>Editor</dd>
-              </div>
-              <div>
-                <dt>Authentification</dt>
-                <dd>Firebase</dd>
-              </div>
-            </dl>
-          </aside>
-
           <form class="login-card" id="login-form">
             <div class="form-heading">
               <h2>Connexion</h2>
