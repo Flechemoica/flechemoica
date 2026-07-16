@@ -86,13 +86,13 @@
 .login-card .primary-button {
   width: 100%;
   margin-top: 24px;
-  background: var(--ink);
+  background: rgb(199, 177, 250);
   color: #000000;
-  box-shadow: 0 12px 24px rgba(24, 33, 47, 0.18);
+  box-shadow: 0 12px 24px rgba(199, 177, 250, 0.34);
 }
 
 .login-card .primary-button:hover {
-  background: var(--ink);
+  background: rgb(187, 162, 247);
 }
 
 .form-message {
