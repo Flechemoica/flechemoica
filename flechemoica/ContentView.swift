@@ -38,6 +38,7 @@ struct ContentView: View {
                 user: authenticatedUser,
                 onUserChanged: { user in
                     currentUser = user
+                    configurePushNotifications(for: user)
                 },
                 onSignedOut: {
                     currentUser = nil
@@ -46,6 +47,7 @@ struct ContentView: View {
         } else {
             AccountSetupView { user in
                 currentUser = user
+                configurePushNotifications(for: user)
             }
         }
     }
@@ -60,11 +62,16 @@ struct ContentView: View {
         }
 
         currentUser = Auth.auth().currentUser
+        if let currentUser {
+            configurePushNotifications(for: currentUser)
+        }
+
         authStateHandle = Auth.auth().addStateDidChangeListener { _, user in
             if user == nil {
                 currentUser = nil
-            } else if currentUser != nil {
+            } else if let user {
                 currentUser = user
+                configurePushNotifications(for: user)
             }
         }
     }
@@ -85,6 +92,10 @@ struct ContentView: View {
 
         hasRequestedTrackingPermission = true
         TrackingPermissionRequester.requestAfterAuthenticationIfPossible()
+    }
+
+    private func configurePushNotifications(for user: User) {
+        PushNotificationManager.shared.configureForAuthenticatedUser(userID: user.uid)
     }
 }
 

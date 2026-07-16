@@ -1,12 +1,15 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, Timestamp, getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
 const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
+const WEEKLY_GRIDS_TOPIC = "weekly_grids";
 
 function normalizeStatus(value) {
   return String(value || "").trim().toLowerCase();
@@ -42,6 +45,29 @@ async function getTargetUser(targetDocId) {
   }
 
   return { userRef, uid };
+}
+
+async function sendWeeklyGridNotification(gridID, gridData) {
+  const title = String(gridData.title || gridData.name || "Nouvelle grille").trim();
+
+  await getMessaging().send({
+    topic: WEEKLY_GRIDS_TOPIC,
+    notification: {
+      title: "Nouvelle grille disponible",
+      body: `${title} est disponible.`,
+    },
+    data: {
+      type: "weekly_grid_published",
+      gridID,
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+        },
+      },
+    },
+  });
 }
 
 exports.adminUserAction = onCall({ region: "europe-west1" }, async (request) => {
@@ -157,5 +183,25 @@ exports.publishScheduledGrids = onSchedule(
     });
 
     await batch.commit();
+  }
+);
+
+exports.notifyWeeklyGridPublished = onDocumentUpdated(
+  {
+    region: "europe-west1",
+    document: "grids/{gridID}",
+  },
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+
+    if (!before || !after) return;
+    if (normalizeStatus(before.status) === "published") return;
+    if (normalizeStatus(after.status) !== "published") return;
+
+    await sendWeeklyGridNotification(event.params.gridID, after);
+    await event.data.after.ref.set({
+      notificationSentAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
   }
 );

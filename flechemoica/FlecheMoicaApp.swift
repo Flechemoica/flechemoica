@@ -28,6 +28,8 @@ final class FlecheMoicaAppCheckProviderFactory: NSObject, AppCheckProviderFactor
 
 @main
 struct FlecheMoicaApp: App {
+    @UIApplicationDelegateAdaptor(FlecheMoicaPushAppDelegate.self) private var pushAppDelegate
+
     init() {
         #if canImport(FirebaseAppCheck)
         AppCheck.setAppCheckProviderFactory(

@@ -13,6 +13,7 @@
 		025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 025C8937300811370021E547 /* FirebaseAnalytics */; };
 		025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894030086EBC0021E547 /* GoogleSignIn */; };
 		025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894230086EBC0021E547 /* GoogleSignInSwift */; };
+		0261879D3009667A00717A18 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 0261879C3009667A00717A18 /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -51,6 +52,7 @@
 			files = (
 				025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */,
 				020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */,
+				0261879D3009667A00717A18 /* FirebaseMessaging in Frameworks */,
 				020732632FFED28900721498 /* FirebaseAuth in Frameworks */,
 				025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */,
 				025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */,
@@ -110,6 +112,7 @@
 				025C8937300811370021E547 /* FirebaseAnalytics */,
 				025C894030086EBC0021E547 /* GoogleSignIn */,
 				025C894230086EBC0021E547 /* GoogleSignInSwift */,
+				0261879C3009667A00717A18 /* FirebaseMessaging */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* flechemoica.app */;
@@ -319,6 +322,7 @@
 				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation nous aide à afficher des publicités plus pertinentes.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -366,6 +370,7 @@
 				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation nous aide à afficher des publicités plus pertinentes.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -475,6 +480,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		0261879C3009667A00717A18 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
