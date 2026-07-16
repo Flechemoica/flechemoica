@@ -6,8 +6,17 @@ const DashboardView = (() => {
   const homeButton = document.getElementById("dashboard-home-button");
   const navItems = Array.from(document.querySelectorAll("[data-panel-target]"));
   const workspacePanels = Array.from(document.querySelectorAll(".workspace-panel"));
+  const panelRoutes = {
+    "overview-panel": "/",
+    "users-panel": "/user.html",
+    "grids-panel": "/grille.html",
+    "accounting-panel": "/comptabilite.html",
+  };
+  const routePanels = Object.fromEntries(
+    Object.entries(panelRoutes).map(([panelID, path]) => [path, panelID])
+  );
 
-  function showPanel(panelID) {
+  function showPanel(panelID, options = {}) {
     navItems.forEach((item) => {
       item.classList.toggle("is-active", item.dataset.panelTarget === panelID);
     });
@@ -21,6 +30,16 @@ const DashboardView = (() => {
     } else {
       UsersView.stop();
     }
+
+    if (panelID === "grids-panel") {
+      GridsView.start();
+    } else {
+      GridsView.stop();
+    }
+
+    if (options.push !== false) {
+      pushRoute(panelID);
+    }
   }
 
   function showLogin() {
@@ -28,17 +47,19 @@ const DashboardView = (() => {
     dashboardView.classList.add("is-hidden");
     accountEmail.textContent = "";
     UsersView.stop();
+    GridsView.stop();
   }
 
   function showDashboard(user) {
     accountEmail.textContent = user.email || "";
     loginView.classList.add("is-hidden");
     dashboardView.classList.remove("is-hidden");
-    showPanel("overview-panel");
+    showPanel(getPanelFromPath(), { push: false });
   }
 
   function init() {
     UsersView.init();
+    GridsView.init();
 
     navItems.forEach((item) => {
       item.addEventListener("click", () => {
@@ -53,6 +74,22 @@ const DashboardView = (() => {
     homeButton.addEventListener("click", () => {
       showPanel("overview-panel");
     });
+
+    window.addEventListener("popstate", () => {
+      if (!dashboardView.classList.contains("is-hidden")) {
+        showPanel(getPanelFromPath(), { push: false });
+      }
+    });
+  }
+
+  function getPanelFromPath() {
+    return routePanels[window.location.pathname] || "overview-panel";
+  }
+
+  function pushRoute(panelID) {
+    const path = panelRoutes[panelID] || "/";
+    if (window.location.pathname === path) return;
+    window.history.pushState({ panelID }, "", path);
   }
 
   return {

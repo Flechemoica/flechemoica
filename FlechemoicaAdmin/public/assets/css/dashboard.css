@@ -394,6 +394,51 @@
   font-size: 0.78rem;
 }
 
+.grids-table {
+  min-width: 1280px;
+}
+
+.grid-words summary {
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.grid-word-list {
+  display: grid;
+  gap: 8px;
+  width: min(520px, 72vw);
+  max-height: 340px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.grid-word-item {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f9fc;
+}
+
+.grid-word-item strong,
+.grid-word-item span,
+.grid-word-item small {
+  display: block;
+}
+
+.grid-word-item span {
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.grid-word-item small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .empty-cell {
   height: 90px;
   color: var(--muted);
