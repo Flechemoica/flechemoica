@@ -151,13 +151,12 @@ const NotificationsView = (() => {
   async function submitNotification(event) {
     event.preventDefault();
 
-    const title = String(titleInput?.value || "Flèche-moi ça").trim();
     const body = String(bodyInput?.value || "").trim();
     const scheduledAt = String(scheduledAtInput?.value || "").trim();
     const sound = String(soundSelect?.value || "disabled");
     const badge = String(badgeSelect?.value || "disabled");
-    const expirationValue = Number.parseInt(String(expirationValueInput?.value || "4"), 10);
-    const expirationUnit = String(expirationUnitSelect?.value || "weeks");
+    const expirationValue = Number.parseInt(String(expirationValueInput?.value || "1"), 10);
+    const expirationUnit = String(expirationUnitSelect?.value || "days");
 
     if (!body) {
       setStatus("Texte requis.", "error");
@@ -182,7 +181,6 @@ const NotificationsView = (() => {
     try {
       setStatus(scheduledAt ? "Programmation..." : "Envoi...");
       await functions.httpsCallable("sendAdminNotification")({
-        title,
         body,
         scheduledAt: scheduledAtPayload,
         sound,
@@ -196,8 +194,8 @@ const NotificationsView = (() => {
       if (titleInput) titleInput.value = "Flèche-moi ça";
       if (soundSelect) soundSelect.value = "disabled";
       if (badgeSelect) badgeSelect.value = "disabled";
-      if (expirationValueInput) expirationValueInput.value = "4";
-      if (expirationUnitSelect) expirationUnitSelect.value = "weeks";
+      if (expirationValueInput) expirationValueInput.value = "1";
+      if (expirationUnitSelect) expirationUnitSelect.value = "days";
       hideForm();
       setStatus(scheduledAt ? "Notification programmée." : "Notification envoyée.");
     } catch (error) {
@@ -212,7 +210,7 @@ const NotificationsView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 6;
+      cell.colSpan = 5;
       cell.className = "empty-cell";
       cell.textContent = "Aucune notification.";
       row.append(cell);
@@ -221,19 +219,18 @@ const NotificationsView = (() => {
     }
 
     const fragment = document.createDocumentFragment();
-    docs.forEach((doc) => fragment.append(createLogRow(doc.data())));
+    docs.forEach((doc) => fragment.append(createLogRow(doc.id, doc.data())));
     tableBody.append(fragment);
   }
 
-  function createLogRow(data) {
+  function createLogRow(id, data) {
     const row = document.createElement("tr");
     row.append(
-      makeTextCell(data.title || "-"),
       makeTextCell(data.body || "-"),
       makeBadgeCell(data.status || "-"),
       makeTextCell(formatDelivery(data.delivery)),
       makeTextCell(formatValue(data.scheduledAt)),
-      makeTextCell(formatValue(data.sentAt))
+      makeSentCell(id, data)
     );
     return row;
   }
@@ -251,10 +248,40 @@ const NotificationsView = (() => {
     const normalized = String(value || "").toLowerCase();
     if (normalized === "sent") badge.classList.add("status-badge-published");
     if (normalized === "scheduled") badge.classList.add("status-badge-scheduled");
+    if (normalized === "cancelled") badge.classList.add("status-badge-blocked");
     if (normalized === "failed") badge.classList.add("status-badge-blocked");
     badge.textContent = value || "-";
     cell.append(badge);
     return cell;
+  }
+
+  function makeSentCell(id, data) {
+    const normalizedStatus = String(data.status || "").toLowerCase();
+    if (normalizedStatus !== "scheduled") {
+      return makeTextCell(formatValue(data.sentAt));
+    }
+
+    const cell = document.createElement("td");
+    const button = document.createElement("button");
+    button.className = "ghost-button compact-action-button";
+    button.type = "button";
+    button.textContent = "Annuler";
+    button.addEventListener("click", () => cancelScheduledNotification(id));
+    cell.append(button);
+    return cell;
+  }
+
+  async function cancelScheduledNotification(notificationID) {
+    if (!notificationID) return;
+    if (!window.confirm("Annuler cette notification programmée ?")) return;
+
+    try {
+      setStatus("Annulation...");
+      await functions.httpsCallable("cancelAdminNotification")({ notificationID });
+      setStatus("Notification annulée.");
+    } catch (error) {
+      setStatus(error.message || "Impossible d'annuler la notification.", "error");
+    }
   }
 
   function formatDelivery(delivery) {

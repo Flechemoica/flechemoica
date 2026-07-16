@@ -1,4 +1,4 @@
-<div class="workspace-header workspace-header-row">
+<div class="workspace-header workspace-header-row notifications-header-row">
   <div>
     <h2>Notifications</h2>
   </div>
@@ -12,7 +12,7 @@
   <div class="field-row">
     <div class="field-group">
       <label for="notification-title">Titre</label>
-      <input id="notification-title" type="text" value="Flèche-moi ça" required>
+      <input id="notification-title" type="text" value="Flèche-moi ça" disabled>
     </div>
     <div class="field-group">
       <label for="notification-scheduled-at">Programmer</label>
@@ -42,15 +42,15 @@
   <div class="field-row">
     <div class="field-group">
       <label for="notification-expiration-value">Délai d'expiration</label>
-      <input id="notification-expiration-value" type="number" min="0" max="365" step="1" value="4">
+      <input id="notification-expiration-value" type="number" min="0" max="365" step="1" value="1">
     </div>
     <div class="field-group">
       <label for="notification-expiration-unit">Unité</label>
       <select id="notification-expiration-unit">
         <option value="minutes">Minutes</option>
         <option value="hours">Heures</option>
-        <option value="days">Jours</option>
-        <option value="weeks" selected>Semaine</option>
+        <option value="days" selected>Jours</option>
+        <option value="weeks">Semaine</option>
       </select>
     </div>
   </div>
@@ -64,7 +64,6 @@
   <table class="users-table">
     <thead>
       <tr>
-        <th>Titre</th>
         <th>Texte</th>
         <th>Statut</th>
         <th>Livraison</th>

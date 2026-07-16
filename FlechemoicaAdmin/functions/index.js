@@ -9,6 +9,7 @@ const { getMessaging } = require("firebase-admin/messaging");
 initializeApp();
 
 const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
+const APP_NOTIFICATION_TITLE = "Flèche-moi ça";
 const WEEKLY_GRIDS_TOPIC = "weekly_grids";
 const ALL_USERS_TOPIC = "all_users";
 const MULTICAST_BATCH_SIZE = 500;
@@ -38,12 +39,12 @@ function normalizeNotificationOptions(data = {}) {
   const sound = String(data.sound || "disabled") === "default" ? "default" : "disabled";
   const badge = String(data.badge || "disabled") === "1" ? 1 : null;
   const expiration = data.expiration || {};
-  const expirationValue = Number.parseInt(String(expiration.value || "4"), 10);
-  const expirationUnit = String(expiration.unit || "weeks");
+  const expirationValue = Number.parseInt(String(expiration.value || "1"), 10);
+  const expirationUnit = String(expiration.unit || "days");
   const unitSeconds = EXPIRATION_UNIT_SECONDS[expirationUnit] || EXPIRATION_UNIT_SECONDS.weeks;
   const safeExpirationValue = Number.isFinite(expirationValue)
     ? Math.min(Math.max(expirationValue, 0), 365)
-    : 4;
+    : 1;
 
   return {
     sound,
@@ -135,7 +136,7 @@ async function sendWeeklyGridNotification(gridID, gridData) {
   const messageID = await getMessaging().send({
     topic: WEEKLY_GRIDS_TOPIC,
     notification: {
-      title: "Flèche-moi ça",
+      title: APP_NOTIFICATION_TITLE,
       body: "La grille de la semaine est disponible !",
     },
     data: {
@@ -158,7 +159,7 @@ async function sendWeeklyGridNotification(gridID, gridData) {
     kind: "weekly_grid",
     target: "topic",
     topic: WEEKLY_GRIDS_TOPIC,
-    title: "Flèche-moi ça",
+    title: APP_NOTIFICATION_TITLE,
     body: "La grille de la semaine est disponible !",
     gridID,
     gridType: WEEKLY_GRID_TYPE,
@@ -226,7 +227,7 @@ async function sendScheduledAdminNotifications() {
     const data = doc.data();
     try {
       const delivery = await sendAllUsersNotification({
-        title: String(data.title || "Flèche-moi ça"),
+        title: APP_NOTIFICATION_TITLE,
         body: String(data.body || ""),
         data: {
           type: "admin_notification",
@@ -374,7 +375,7 @@ exports.sendAdminNotification = onCall({ region: "europe-west1" }, async (reques
 
   await assertEditor(request.auth.uid);
 
-  const title = requireString(request.data?.title || "Flèche-moi ça", "Titre").slice(0, 100);
+  const title = APP_NOTIFICATION_TITLE;
   const body = requireString(request.data?.body, "Texte").slice(0, 240);
   const scheduledAtValue = String(request.data?.scheduledAt || "").trim();
   const notificationOptions = normalizeNotificationOptions(request.data || {});
@@ -442,6 +443,36 @@ exports.sendAdminNotification = onCall({ region: "europe-west1" }, async (reques
     });
     throw new HttpsError("internal", error.message || "Impossible d'envoyer la notification.");
   }
+});
+
+exports.cancelAdminNotification = onCall({ region: "europe-west1" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Connexion requise.");
+  }
+
+  await assertEditor(request.auth.uid);
+
+  const notificationID = requireString(request.data?.notificationID, "Notification");
+  const db = getFirestore();
+  const ref = db.collection(NOTIFICATION_LOGS_COLLECTION).doc(notificationID);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "Notification introuvable.");
+  }
+
+  if (snapshot.get("status") !== "scheduled") {
+    throw new HttpsError("failed-precondition", "Seules les notifications programmées peuvent être annulées.");
+  }
+
+  await ref.set({
+    status: "cancelled",
+    cancelledAt: FieldValue.serverTimestamp(),
+    cancelledBy: request.auth.uid,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { ok: true, notificationID, status: "cancelled" };
 });
 
 exports.publishScheduledGrids = onSchedule(
