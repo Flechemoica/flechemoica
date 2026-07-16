@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flèche-moi ça Admin</title>
+  <link rel="stylesheet" href="assets/css/global.css">
+  <link rel="stylesheet" href="assets/css/login.css">
+  <link rel="stylesheet" href="assets/css/dashboard.css">
+</head>
+<body>
+  <main id="login-view" class="login-view">
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="login-brand" aria-label="Flèche-moi ça">
+        <img class="login-logo" src="assets/img/flechemoica-logo.svg" alt="">
+        <div class="login-brand-name" aria-hidden="true">
+          <span>FLÈCHE</span>
+          <span>MOI ÇA</span>
+        </div>
+      </div>
+      <p class="eyebrow">Accès Editors</p>
+      <h2 id="login-title">Connexion</h2>
+      <form id="login-form">
+        <label for="email">Adresse e-mail</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+
+        <label for="password">Mot de passe</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+
+        <button id="login-button" class="primary-button" type="submit">Se connecter</button>
+        <p id="login-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+
+  <main id="dashboard-view" class="dashboard-view is-hidden">
+    <header class="topbar">
+      <h1>Flèche-moi ça Admin</h1>
+      <div class="account-box">
+        <span id="account-email"></span>
+        <button id="logout-button" class="ghost-button" type="button">Se déconnecter</button>
+      </div>
+    </header>
+
+    <div class="dashboard-grid">
+      <nav class="sidebar" aria-label="Navigation admin">
+        <button class="nav-item is-active" type="button">Tableau de bord</button>
+        <button class="nav-item" type="button">Utilisateurs</button>
+        <button class="nav-item" type="button">Grilles</button>
+        <button class="nav-item" type="button">Import JSON</button>
+      </nav>
+
+      <section class="workspace">
+        <div class="workspace-header">
+          <p class="eyebrow">Bienvenue</p>
+          <h2>Tableau de bord</h2>
+        </div>
+        <div class="metric-row" aria-label="Indicateurs">
+          <article class="metric-card">
+            <span class="metric-label">Statut</span>
+            <strong>Editor</strong>
+          </article>
+          <article class="metric-card">
+            <span class="metric-label">Accès</span>
+            <strong>Autorisé</strong>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/__/firebase/10.12.5/firebase-app-compat.js"></script>
+  <script src="/__/firebase/10.12.5/firebase-auth-compat.js"></script>
+  <script src="/__/firebase/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="/__/firebase/10.12.5/firebase-database-compat.js"></script>
+  <script src="/__/firebase/init.js"></script>
+  <script src="assets/js/firebase-config.js"></script>
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/login.js"></script>
+  <script src="assets/js/dashboard.js"></script>
+  <script src="assets/js/users.js"></script>
+  <script src="assets/js/grids.js"></script>
+  <script src="assets/js/jsonImport.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

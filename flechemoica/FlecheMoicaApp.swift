@@ -1,4 +1,5 @@
 import FirebaseCore
+import GoogleSignIn
 import SwiftUI
 
 #if canImport(FirebaseAppCheck)
@@ -34,6 +35,7 @@ struct FlecheMoicaApp: App {
         )
         #endif
 
+        FirebaseConfiguration.shared.setLoggerLevel(.min)
         FirebaseApp.configure()
 
         #if canImport(FirebaseAnalytics)
@@ -52,6 +54,9 @@ struct FlecheMoicaApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

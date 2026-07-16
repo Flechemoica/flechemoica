@@ -2,7 +2,12 @@ import SwiftUI
 
 extension Font {
     static func xpTahoma(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .custom("Tahoma", size: size).weight(weight)
+        switch weight {
+        case .bold, .heavy, .black, .semibold:
+            return .custom("Tahoma-Bold", size: size)
+        default:
+            return .custom("Tahoma", size: size)
+        }
     }
 }
 

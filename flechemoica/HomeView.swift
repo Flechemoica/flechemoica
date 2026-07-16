@@ -1,4 +1,6 @@
+import AuthenticationServices
 import Combine
+import CryptoKit
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
@@ -36,6 +38,7 @@ struct HomeView: View {
     @State private var displayNameOverride: String?
     @State private var emailOverride: String?
     @State private var photoURLOverride: URL?
+    @State private var isDeletingAccount = false
 
     private var displayName: String {
         if let displayNameOverride, !displayNameOverride.isEmpty {
@@ -133,6 +136,7 @@ struct HomeView: View {
                             initialAvatarName: avatarName,
                             backAction: { isShowingSettings = false },
                             userChanged: handleUserChanged,
+                            deletingAccountChanged: { isDeletingAccount = $0 },
                             signedOut: handleSignedOut
                         )
                     } else if isShowingPublicProfile {
@@ -150,7 +154,7 @@ struct HomeView: View {
                             grid: selectedGameGrid,
                             userID: user.uid,
                             backAction: { self.selectedGameGrid = nil },
-                            completionRecorded: recordCompletedGridTitle
+                            completionRecorded: recordCompletedGrid
                         )
                     } else {
                         HomeContent(
@@ -181,18 +185,21 @@ struct HomeView: View {
             }
         }
         .task(id: user.uid) {
+            guard !isDeletingAccount else { return }
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
         }
         .task(id: scenePhase) {
-            guard scenePhase == .active else { return }
+            guard scenePhase == .active, !isDeletingAccount else { return }
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
         }
     }
 
     private func refreshAuthenticatedProfile() async {
+        guard !isDeletingAccount else { return }
         try? await user.reload()
+        guard !isDeletingAccount else { return }
 
         let refreshedUser = Auth.auth().currentUser ?? user
         displayNameOverride = refreshedUser.displayName
@@ -203,22 +210,34 @@ struct HomeView: View {
     }
 
     private func loadProfileMetadataAndSyncEmail(for refreshedUser: User) async {
+        guard !isDeletingAccount else { return }
         do {
             let database = Firestore.firestore()
             let document = database
                 .collection("users")
                 .document(refreshedUser.uid)
             let snapshot = try await document.getDocument()
+            guard snapshot.exists else {
+                try? Auth.auth().signOut()
+                handleSignedOut()
+                return
+            }
+
             let userData = snapshot.data()
-            let publicSnapshot = try? await database
-                .collection("publicProfiles")
-                .document(refreshedUser.uid)
-                .getDocument()
-            let publicData = publicSnapshot?.data()
-            isEditor = Self.isEditorProfile(userData) || Self.isEditorProfile(publicData)
-            completedGridTitles = Self.completedGridTitles(from: publicData).isEmpty
-                ? Self.completedGridTitles(from: userData)
-                : Self.completedGridTitles(from: publicData)
+            isEditor = Self.isEditorProfile(userData)
+            completedGridTitles = Self.completedGridTitles(from: userData)
+
+            if let storedPseudo = userData?["pseudo"] as? String, !storedPseudo.isEmpty {
+                displayNameOverride = storedPseudo
+            }
+
+            if let storedEmail = userData?["email"] as? String, !storedEmail.isEmpty {
+                emailOverride = storedEmail
+            }
+
+            if let avatarID = userData?["avatarID"] as? String, !avatarID.isEmpty {
+                photoURLOverride = URL(string: "flechemoica-avatar://\(avatarID)")
+            }
 
             if let unlockedGridIDs = userData?["unlockedGridIDs"] as? [String] {
                 rewardUnlockedGridIDs = Set(unlockedGridIDs)
@@ -239,6 +258,7 @@ struct HomeView: View {
         document: DocumentReference,
         storedEmail: String?
     ) async {
+        guard !isDeletingAccount else { return }
         guard let authEmail = refreshedUser.email, !authEmail.isEmpty, storedEmail != authEmail else {
             return
         }
@@ -266,17 +286,29 @@ struct HomeView: View {
     private var selectedGridRequiresRewardedAd: Bool {
         guard let selectedPublishedGrid else { return false }
         return selectedGridIndex > 0
-            && !isGridCompleted(selectedPublishedGrid.id)
+            && !isGridCompleted(selectedPublishedGrid)
             && !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id)
     }
 
     private var selectedGridIsCompleted: Bool {
         guard let selectedPublishedGrid else { return false }
-        return isGridCompleted(selectedPublishedGrid.id)
+        return isGridCompleted(selectedPublishedGrid)
     }
 
-    private func isGridCompleted(_ id: String) -> Bool {
-        UserDefaults.standard.bool(forKey: "gridCompleted.\(id)")
+    private func isGridCompleted(_ grid: PublishedGrid) -> Bool {
+        UserDefaults.standard.bool(forKey: userScopedGridStorageKey(prefix: "gridCompleted", gridID: grid.id))
+            || completedGridTitles.contains(grid.title)
+    }
+
+    private func userScopedGridStorageKey(prefix: String, gridID: String) -> String {
+        let safeUserID = user.uid
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+        let safeGridID = gridID
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+
+        return "\(prefix).\(safeUserID).\(safeGridID)"
     }
 
     private func loadPublishedGrids() async {
@@ -295,12 +327,36 @@ struct HomeView: View {
                 .sorted { $0.releaseAt > $1.releaseAt }
             selectedGridIndex = publishedGrids.isEmpty ? 0 : min(selectedGridIndex, publishedGrids.count - 1)
             gridLoadingMessage = publishedGrids.isEmpty ? "Aucune grille publiee" : nil
+            await loadCompletedPlayerCounts()
         } catch {
             let nsError = error as NSError
-            gridLoadingMessage = "Erreur Firebase: \(nsError.localizedDescription)"
+            gridLoadingMessage = "Erreur de chargement: \(nsError.localizedDescription)"
         }
 
         isLoadingPublishedGrids = false
+    }
+
+    private func loadCompletedPlayerCounts() async {
+        let grids = publishedGrids
+        guard !grids.isEmpty else { return }
+
+        let database = Firestore.firestore()
+
+        for grid in grids {
+            do {
+                let snapshot = try await database
+                    .collection("users")
+                    .whereField("completedGridTitles", arrayContains: grid.title)
+                    .getDocuments()
+                let historicalCompletedCount = snapshot.documents.count
+
+                if let index = publishedGrids.firstIndex(where: { $0.id == grid.id }) {
+                    publishedGrids[index].completedPlayerCount = historicalCompletedCount
+                }
+            } catch {
+                continue
+            }
+        }
     }
 
     private func showPreviousGrid() {
@@ -318,7 +374,7 @@ struct HomeView: View {
         gridAccessMessage = nil
 
         guard selectedGridIndex > 0, !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id) else {
-            selectedGameGrid = selectedPublishedGrid
+            openGrid(selectedPublishedGrid)
             return
         }
 
@@ -334,9 +390,17 @@ struct HomeView: View {
 
                 rewardUnlockedGridIDs.insert(selectedPublishedGrid.id)
                 persistUnlockedGrid(id: selectedPublishedGrid.id)
-                selectedGameGrid = selectedPublishedGrid
+                openGrid(selectedPublishedGrid)
             }
         }
+    }
+
+    private func openGrid(_ grid: PublishedGrid) {
+        if completedGridTitles.contains(grid.title) {
+            UserDefaults.standard.set(true, forKey: userScopedGridStorageKey(prefix: "gridCompleted", gridID: grid.id))
+        }
+
+        selectedGameGrid = publishedGrids.first { $0.id == grid.id } ?? grid
     }
 
     private func persistUnlockedGrid(id: String) {
@@ -350,7 +414,7 @@ struct HomeView: View {
                         "updatedAt": FieldValue.serverTimestamp()
                     ], merge: true)
             } catch {
-                gridAccessMessage = "Grille debloquee sur cet appareil, mais sauvegarde Firebase impossible."
+                gridAccessMessage = "Grille debloquee sur cet appareil, mais synchronisation impossible."
             }
         }
     }
@@ -361,7 +425,7 @@ struct HomeView: View {
 
         do {
             let snapshot = try await Firestore.firestore()
-                .collection("publicProfiles")
+                .collection("users")
                 .order(by: "pseudoKey")
                 .limit(to: 50)
                 .getDocuments()
@@ -370,7 +434,7 @@ struct HomeView: View {
             profileListMessage = publicProfiles.isEmpty ? "Aucun profil public" : nil
         } catch {
             let nsError = error as NSError
-            profileListMessage = "Erreur Firebase: \(nsError.localizedDescription)"
+            profileListMessage = "Erreur de chargement: \(nsError.localizedDescription)"
         }
 
         isLoadingPublicProfiles = false
@@ -391,10 +455,15 @@ struct HomeView: View {
         isShowingPublicProfile = false
     }
 
-    private func recordCompletedGridTitle(_ title: String) {
+    private func recordCompletedGrid(id: String, title: String) {
+        let wasAlreadyCompleted = completedGridTitles.contains(title)
         guard !completedGridTitles.contains(title) else { return }
         completedGridTitles.append(title)
         completedGridTitles.sort()
+
+        if !wasAlreadyCompleted, let index = publishedGrids.firstIndex(where: { $0.id == id }) {
+            publishedGrids[index].completedPlayerCount += 1
+        }
     }
 
     private func triggerWizzShake() {
@@ -427,7 +496,6 @@ struct HomeView: View {
         components.scheme = "mailto"
         components.path = "contact@flechemoica.fr"
         components.queryItems = [
-            URLQueryItem(name: "subject", value: "Support Flèche-moi ça"),
             URLQueryItem(name: "body", value: supportMailBody)
         ]
 
@@ -437,12 +505,8 @@ struct HomeView: View {
 
     private var supportMailBody: String {
         """
-        Bonjour,
-
-        Décris ton problème ici :
 
 
-        ---
         Infos utilisateur
         UID : \(user.uid)
         Pseudo : \(displayName)
@@ -579,6 +643,7 @@ private struct PublishedGrid: Identifiable {
     let id: String
     let title: String
     let releaseAt: Date
+    var completedPlayerCount: Int
     let crosswordGrid: CrosswordGrid?
 
     init?(document: QueryDocumentSnapshot) {
@@ -592,6 +657,7 @@ private struct PublishedGrid: Identifiable {
         self.id = document.documentID
         self.title = title
         self.releaseAt = releaseTimestamp.dateValue()
+        self.completedPlayerCount = data["completedPlayerCount"] as? Int ?? 0
         self.crosswordGrid = CrosswordGrid(firestoreData: data, fallbackTitle: title)
     }
 
@@ -1074,6 +1140,11 @@ private struct PublishedGridCard: View {
                         .font(.custom("Tahoma", size: 13))
                         .foregroundStyle(.black.opacity(0.72))
                         .lineLimit(1)
+
+                    Text("\(grid.completedPlayerCount) \(grid.completedPlayerCount > 1 ? "joueurs ont" : "joueur a") terminé cette grille")
+                        .font(.custom("Tahoma", size: 13))
+                        .foregroundStyle(.black.opacity(0.72))
+                        .lineLimit(1)
                 } else {
                     Text(isLoading ? "Chargement..." : (message ?? "Aucune grille publiee"))
                         .font(.xpTahoma(size: 15, weight: .bold))
@@ -1126,7 +1197,7 @@ private struct GridGameContent: View {
     let grid: PublishedGrid
     let userID: String
     let backAction: () -> Void
-    let completionRecorded: (String) -> Void
+    let completionRecorded: (String, String) -> Void
 
     @State private var answers: [GridCoordinate: String] = [:]
     @State private var wrongCells: Set<GridCoordinate> = []
@@ -1175,17 +1246,15 @@ private struct GridGameContent: View {
 
                 HStack(spacing: 8) {
                     if !isCompleted {
-                        Button("Vérifier") {
+                        XPToolbarIconButton(systemName: "checkmark", accessibilityLabel: "Verifier la grille") {
                             if verifyAnswers(), isGridFullyAnswered() {
                                 closeKeyboard()
                                 completeGrid()
                             }
                         }
-                        .buttonStyle(XPButtonStyle())
                     }
 
-                    Button("Quitter", action: backAction)
-                        .buttonStyle(XPButtonStyle())
+                    XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Quitter la grille", action: backAction)
                 }
             }
             .padding(12)
@@ -1245,7 +1314,7 @@ private struct GridGameContent: View {
                     Text("Grille indisponible")
                         .font(.xpTahoma(size: 20, weight: .bold))
                         .foregroundStyle(.black)
-                    Text("Le document Firebase doit contenir le JSON dans le champ grid.")
+                    Text("La grille doit contenir le JSON dans le champ grid.")
                         .font(.custom("Tahoma", size: 14))
                         .foregroundStyle(.black.opacity(0.72))
                         .multilineTextAlignment(.center)
@@ -1279,25 +1348,35 @@ private struct GridGameContent: View {
     }
 
     private var savedAnswersKey: String {
-        "gridAnswers.\(grid.id)"
+        userScopedStorageKey(prefix: "gridAnswers")
     }
 
     private var savedElapsedSecondsKey: String {
-        "gridElapsedSeconds.\(grid.id)"
+        userScopedStorageKey(prefix: "gridElapsedSeconds")
     }
 
     private var savedCompletionKey: String {
-        "gridCompleted.\(grid.id)"
+        userScopedStorageKey(prefix: "gridCompleted")
     }
 
     private var savedCompletionDateKey: String {
-        "gridCompletedAt.\(grid.id)"
+        userScopedStorageKey(prefix: "gridCompletedAt")
+    }
+
+    private var safeUserStorageKey: String {
+        userID
+            .replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
     }
 
     private var safeGridStorageKey: String {
         grid.id
             .replacingOccurrences(of: ".", with: "_")
             .replacingOccurrences(of: "/", with: "_")
+    }
+
+    private func userScopedStorageKey(prefix: String) -> String {
+        "\(prefix).\(safeUserStorageKey).\(safeGridStorageKey)"
     }
 
     private func typeLetter(_ letter: String) {
@@ -1388,7 +1467,7 @@ private struct GridGameContent: View {
         UserDefaults.standard.set(finishedAt.timeIntervalSince1970, forKey: savedCompletionDateKey)
         saveElapsedSeconds()
         stopTimer()
-        completionRecorded(grid.title)
+        completionRecorded(grid.id, grid.title)
         persistCompletedGrid(completedAt: finishedAt)
     }
 
@@ -1456,12 +1535,6 @@ private struct GridGameContent: View {
                     "completedGrids": [safeGridStorageKey: completedPayload],
                     "completedGridTitles": FieldValue.arrayUnion([grid.title]),
                     "gridTimers": [safeGridStorageKey: elapsedSeconds],
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], merge: true)
-
-                try await database.collection("publicProfiles").document(userID).setData([
-                    "completedGrids": [safeGridStorageKey: completedPayload],
-                    "completedGridTitles": FieldValue.arrayUnion([grid.title]),
                     "updatedAt": FieldValue.serverTimestamp()
                 ], merge: true)
             } catch {
@@ -2055,32 +2128,15 @@ private struct PublicProfileContent: View {
                 .frame(maxWidth: .infinity)
                 .padding(18)
 
-                if let settingsAction {
-                    VStack(spacing: 8) {
-                        Button(action: settingsAction) {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.black.opacity(0.78))
-                                .frame(width: 34, height: 34)
-                                .background(Color.xpChrome)
-                                .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Reglages du profil")
+                VStack(spacing: 8) {
+                    XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Retour", action: backAction)
 
-                        Button(action: contactAction) {
-                            Text("?")
-                                .font(.xpTahoma(size: 18, weight: .bold))
-                                .foregroundStyle(.black.opacity(0.78))
-                                .frame(width: 34, height: 34)
-                                .background(Color.xpChrome)
-                                .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Contacter le support")
+                    if let settingsAction {
+                        XPToolbarIconButton(systemName: "gearshape.fill", accessibilityLabel: "Reglages du profil", action: settingsAction)
+                        XPToolbarIconButton(text: "?", accessibilityLabel: "Contacter le support", action: contactAction)
                     }
-                    .padding(8)
                 }
+                .padding(8)
             }
             .background(Color.xpPanel)
             .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
@@ -2111,9 +2167,6 @@ private struct PublicProfileContent: View {
             .background(Color.xpPanel)
             .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
 
-            Button("Retour", action: backAction)
-                .buttonStyle(XPButtonStyle())
-
             Spacer(minLength: 0)
         }
         .padding(14)
@@ -2143,7 +2196,7 @@ private struct ProfileInfoWindow: View {
                     .font(.xpTahoma(size: 15, weight: .bold))
                     .foregroundStyle(.black)
 
-                Text("Les profils publics affichent le pseudo, l'avatar, le statut Éditeur quand il existe, et les grilles terminées. Les données privées du compte restent dans ton espace utilisateur Firebase.")
+                Text("Les profils publics affichent le pseudo, l'avatar, le statut Éditeur quand il existe, et les grilles terminées. Les données privées du compte restent dans ton espace utilisateur.")
                     .font(.custom("Tahoma", size: 13))
                     .foregroundStyle(.black.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
@@ -2180,11 +2233,13 @@ private struct ProfileSettingsContent: View {
     let initialAvatarName: String
     let backAction: () -> Void
     let userChanged: (User) -> Void
+    let deletingAccountChanged: (Bool) -> Void
     let signedOut: () -> Void
 
     private enum SettingsPanel: Identifiable {
         case displayName
         case avatar
+        case email
         case password
         case deleteAccount
 
@@ -2192,6 +2247,7 @@ private struct ProfileSettingsContent: View {
             switch self {
             case .displayName: return "displayName"
             case .avatar: return "avatar"
+            case .email: return "email"
             case .password: return "password"
             case .deleteAccount: return "deleteAccount"
             }
@@ -2201,6 +2257,7 @@ private struct ProfileSettingsContent: View {
             switch self {
             case .displayName: return "Modifier le pseudo"
             case .avatar: return "Changer d'avatar"
+            case .email: return "Changer l'e-mail"
             case .password: return "Changer le mot de passe"
             case .deleteAccount: return "Supprimer le compte"
             }
@@ -2213,12 +2270,14 @@ private struct ProfileSettingsContent: View {
     @State private var savedEmail: String
     @State private var savedAvatarName: String
     @State private var currentPassword = ""
+    @State private var newEmail = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     @State private var statusText = ""
     @State private var isSubmitting = false
     @State private var isShowingDeleteConfirmation = false
     @State private var activePanel: SettingsPanel?
+    @State private var appleSignInCoordinator: ProfileAppleSignInCoordinator?
 
     init(
         user: User,
@@ -2227,6 +2286,7 @@ private struct ProfileSettingsContent: View {
         initialAvatarName: String,
         backAction: @escaping () -> Void,
         userChanged: @escaping (User) -> Void,
+        deletingAccountChanged: @escaping (Bool) -> Void,
         signedOut: @escaping () -> Void
     ) {
         self.user = user
@@ -2235,6 +2295,7 @@ private struct ProfileSettingsContent: View {
         self.initialAvatarName = initialAvatarName
         self.backAction = backAction
         self.userChanged = userChanged
+        self.deletingAccountChanged = deletingAccountChanged
         self.signedOut = signedOut
         _displayName = State(initialValue: initialDisplayName)
         _selectedAvatarIndex = State(initialValue: Self.avatarNames.firstIndex(of: initialAvatarName) ?? 0)
@@ -2279,6 +2340,17 @@ private struct ProfileSettingsContent: View {
         !newPassword.isEmpty || !confirmPassword.isEmpty
     }
 
+    private var trimmedNewEmail: String {
+        newEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canChangeEmail: Bool {
+        !isSubmitting
+            && currentPassword.count >= 6
+            && trimmedNewEmail.contains("@")
+            && trimmedNewEmail.lowercased() != savedEmail.lowercased()
+    }
+
     private var canSave: Bool {
         guard !isSubmitting else { return false }
         guard !trimmedDisplayName.isEmpty else { return false }
@@ -2289,6 +2361,10 @@ private struct ProfileSettingsContent: View {
         }
 
         return true
+    }
+
+    private var isAppleAccount: Bool {
+        user.providerData.contains { $0.providerID == "apple.com" }
     }
 
     private var appVersionText: String {
@@ -2310,38 +2386,40 @@ private struct ProfileSettingsContent: View {
 
     var body: some View {
         ZStack {
-            VStack(spacing: 14) {
-                HStack {
-                    Button("Retour", action: backAction)
-                        .buttonStyle(XPButtonStyle())
-                        .disabled(isSubmitting)
+            VStack(spacing: 0) {
+                VStack(spacing: 14) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                SettingsSectionTitle("Compte")
+                                Spacer(minLength: 0)
+                                XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Retour", action: backAction)
+                                    .disabled(isSubmitting)
+                            }
+                            SettingsMenuButton(title: "Modifier le pseudo") {
+                                activePanel = .displayName
+                            }
+                            SettingsMenuButton(title: "Changer d'avatar") {
+                                activePanel = .avatar
+                            }
+                            SettingsMenuButton(title: "Changer l'e-mail") {
+                                activePanel = .email
+                            }
+                            SettingsMenuButton(title: "Changer le mot de passe") {
+                                activePanel = .password
+                            }
+                        }
+                        .settingsPanel()
 
-                    Spacer(minLength: 0)
-                }
+                        VStack(alignment: .leading, spacing: 14) {
+                            SettingsSectionTitle("Confidentialité")
+                            SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
+                                activePanel = .deleteAccount
+                            }
+                        }
+                        .settingsPanel()
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        SettingsSectionTitle("Compte")
-                        SettingsMenuButton(title: "Modifier le pseudo") {
-                            activePanel = .displayName
-                        }
-                        SettingsMenuButton(title: "Changer d'avatar") {
-                            activePanel = .avatar
-                        }
-                        SettingsMenuButton(title: "Changer le mot de passe") {
-                            activePanel = .password
-                        }
-                        Text(appVersionText)
-                            .font(.custom("Tahoma", size: 12))
-                            .foregroundStyle(.black.opacity(0.55))
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 2)
-
-                        SettingsSectionTitle("Confidentialité")
-                            .padding(.top, 4)
-                        SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
-                            activePanel = .deleteAccount
-                        }
+                        appVersionBadge
 
                         if !statusText.isEmpty {
                             Text(statusText)
@@ -2352,18 +2430,17 @@ private struct ProfileSettingsContent: View {
                                 .padding(.top, 4)
                         }
                     }
-                    .settingsPanel()
-                }
 
-                Button("Déconnexion") {
-                    signOutTapped()
+                    Button("Déconnexion") {
+                        signOutTapped()
+                    }
+                    .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                    .disabled(isSubmitting)
                 }
-                .buttonStyle(XPButtonStyle(foregroundColor: .red))
-                .disabled(isSubmitting)
+                .padding(14)
 
                 SettingsLegalFooter()
             }
-            .padding(14)
 
             if let activePanel {
                 SettingsDetailWindow(title: activePanel.title) {
@@ -2372,19 +2449,26 @@ private struct ProfileSettingsContent: View {
                     panelContent(for: activePanel)
                 }
             }
-        }
-        .confirmationDialog(
-            "Supprimer définitivement ce compte ?",
-            isPresented: $isShowingDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Supprimer le compte", role: .destructive) {
-                deleteAccountTapped()
+
+            if isShowingDeleteConfirmation {
+                DeleteAccountConfirmationWindow(
+                    cancelAction: {
+                        isShowingDeleteConfirmation = false
+                    },
+                    confirmAction: {
+                        isShowingDeleteConfirmation = false
+                        deleteAccountTapped()
+                    }
+                )
             }
-            Button("Annuler", role: .cancel) {}
-        } message: {
-            Text("Le compte Firebase Auth et les documents Firestore users/publicProfiles seront supprimés.")
         }
+    }
+
+    private var appVersionBadge: some View {
+        Text(appVersionText)
+            .font(.custom("Tahoma", size: 12))
+            .foregroundStyle(.black.opacity(0.62))
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     @ViewBuilder
@@ -2407,6 +2491,19 @@ private struct ProfileSettingsContent: View {
                 )
                 savePanelButton(title: "Enregistrer")
             }
+        case .email:
+            VStack(alignment: .leading, spacing: 12) {
+                ProfileReadOnlyField(text: savedEmail, prompt: "E-mail")
+                ProfileTextField(text: $newEmail, prompt: "Nouvel e-mail", keyboard: .emailAddress, textContentType: .emailAddress)
+                ProfileSecureField(text: $currentPassword, prompt: "Mot de passe")
+                Button(isSubmitting ? "Enregistrement..." : "Changer l'e-mail") {
+                    changeEmailTapped()
+                }
+                .buttonStyle(XPButtonStyle())
+                .opacity(canChangeEmail ? 1 : 0.55)
+                .disabled(!canChangeEmail)
+                .frame(maxWidth: .infinity)
+            }
         case .password:
             VStack(alignment: .leading, spacing: 12) {
                 ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
@@ -2417,10 +2514,12 @@ private struct ProfileSettingsContent: View {
         case .deleteAccount:
             VStack(alignment: .leading, spacing: 12) {
                 SettingsTextPanel(lines: [
-                    "Cette action supprime définitivement le compte Firebase Auth et les documents Firestore users/publicProfiles.",
-                    "Entre ton mot de passe actuel pour confirmer."
+                    "Cette action supprime définitivement le compte.",
+                    isAppleAccount ? "Une confirmation Apple sera demandee pour supprimer le compte." : "Entre ton mot de passe actuel pour confirmer."
                 ])
-                ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
+                if !isAppleAccount {
+                    ProfileSecureField(text: $currentPassword, prompt: "Ancien mot de passe")
+                }
                 Button("Supprimer le compte") {
                     requestAccountDeletionConfirmation()
                 }
@@ -2495,8 +2594,37 @@ private struct ProfileSettingsContent: View {
         }
     }
 
+    private func changeEmailTapped() {
+        guard canChangeEmail else {
+            statusText = "Verifie le nouvel e-mail et l'ancien mot de passe."
+            return
+        }
+
+        isSubmitting = true
+        statusText = "Changement de l'e-mail..."
+
+        Task {
+            do {
+                try await reauthenticateUser()
+                try await user.sendEmailVerification(beforeUpdatingEmail: trimmedNewEmail)
+
+                await MainActor.run {
+                    isSubmitting = false
+                    newEmail = ""
+                    currentPassword = ""
+                    statusText = "E-mail de verification envoye. Valide-le pour changer l'adresse."
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                    statusText = firebaseMessage(for: error)
+                }
+            }
+        }
+    }
+
     private func requestAccountDeletionConfirmation() {
-        guard currentPassword.count >= 6 else {
+        guard isAppleAccount || currentPassword.count >= 6 else {
             statusText = "Entre ton ancien mot de passe avant de supprimer le compte."
             return
         }
@@ -2515,29 +2643,102 @@ private struct ProfileSettingsContent: View {
     }
 
     private func deleteAccountTapped() {
-        guard currentPassword.count >= 6 else {
+        guard isAppleAccount || currentPassword.count >= 6 else {
             statusText = "Entre ton ancien mot de passe pour supprimer le compte."
             return
         }
 
         isSubmitting = true
         statusText = "Suppression du compte..."
+        deletingAccountChanged(true)
 
         Task {
+            var appleAuthorizationCode: String?
+            var firebaseDeletionIDToken: String?
+            var shouldForceSignOut = false
+
             do {
-                try await reauthenticateUser()
+                if isAppleAccount {
+                    let appleDeletionContext = try await appleDeletionContext()
+                    try await user.reauthenticate(with: appleDeletionContext.credential)
+                    appleAuthorizationCode = appleDeletionContext.authorizationCode
+                } else {
+                    try await reauthenticateUser()
+                }
+
+                let userToDelete = Auth.auth().currentUser ?? user
+                if let appleAuthorizationCode {
+                    firebaseDeletionIDToken = try await userToDelete.getIDTokenResult(forcingRefresh: true).token
+                    try await revokeAppleAuthorization(authorizationCode: appleAuthorizationCode)
+                    print("Apple Sign in authorization revoked.")
+                }
+
                 try await deleteUserDocuments()
-                try await user.delete()
+                shouldForceSignOut = true
+                try await deleteFirebaseAuthUser(userToDelete, fallbackIDToken: firebaseDeletionIDToken)
+                try? Auth.auth().signOut()
 
                 await MainActor.run {
                     signedOut()
                 }
             } catch {
+                print("Account deletion failed: \(error)")
                 await MainActor.run {
-                    isSubmitting = false
-                    statusText = firebaseMessage(for: error)
+                    if shouldForceSignOut {
+                        try? Auth.auth().signOut()
+                        signedOut()
+                    } else {
+                        deletingAccountChanged(false)
+                        isSubmitting = false
+                        statusText = firebaseMessage(for: error)
+                    }
                 }
             }
+        }
+    }
+
+    private func revokeAppleAuthorization(authorizationCode: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Auth.auth().revokeToken(withAuthorizationCode: authorizationCode) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private func deleteFirebaseAuthUser(_ userToDelete: User, fallbackIDToken: String?) async throws {
+        do {
+            try await userToDelete.delete()
+            print("Firebase Auth user deleted: \(userToDelete.uid)")
+        } catch {
+            guard let fallbackIDToken else {
+                throw error
+            }
+
+            print("Firebase Auth SDK deletion failed, retrying with REST: \(error)")
+            try await deleteFirebaseAuthUserWithREST(idToken: fallbackIDToken)
+            print("Firebase Auth user deleted with REST fallback: \(userToDelete.uid)")
+        }
+    }
+
+    private func deleteFirebaseAuthUserWithREST(idToken: String) async throws {
+        guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "API_KEY") as? String,
+              let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:delete?key=\(apiKey)") else {
+            throw ProfileSettingsError.missingFirebaseAPIKey
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["idToken": idToken])
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw ProfileSettingsError.firebaseRESTDeletionFailed
         }
     }
 
@@ -2554,17 +2755,70 @@ private struct ProfileSettingsContent: View {
         try await user.reauthenticate(with: credential)
     }
 
+    private func appleDeletionContext() async throws -> AppleDeletionContext {
+        let nonce = randomNonceString()
+        let appleIDCredential = try await requestAppleCredential(nonce: nonce)
+
+        guard let appleIDToken = appleIDCredential.identityToken,
+              let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+            throw ProfileSettingsError.missingAppleIdentityToken
+        }
+        guard let authorizationCode = appleIDCredential.authorizationCode,
+              let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
+            throw ProfileSettingsError.missingAppleAuthorizationCode
+        }
+
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idTokenString,
+            rawNonce: nonce,
+            fullName: appleIDCredential.fullName
+        )
+
+        return AppleDeletionContext(
+            credential: credential,
+            authorizationCode: authorizationCodeString
+        )
+    }
+
+    private func requestAppleCredential(nonce: String) async throws -> ASAuthorizationAppleIDCredential {
+        try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                let request = ASAuthorizationAppleIDProvider().createRequest()
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = sha256(nonce)
+
+                let coordinator = ProfileAppleSignInCoordinator(
+                    onSuccess: { credential in
+                        appleSignInCoordinator = nil
+                        continuation.resume(returning: credential)
+                    },
+                    onFailure: { error in
+                        appleSignInCoordinator = nil
+                        continuation.resume(throwing: error)
+                    }
+                )
+
+                appleSignInCoordinator = coordinator
+
+                let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+                authorizationController.delegate = coordinator
+                authorizationController.presentationContextProvider = coordinator
+                authorizationController.performRequests()
+            }
+        }
+    }
+
     private func validateProfileAvailability() async throws {
         let database = Firestore.firestore()
 
         if displayNameKey != savedDisplayNameKey {
             let profileKeySnapshot = try await database
-                .collection("publicProfiles")
+                .collection("users")
                 .whereField("pseudoKey", isEqualTo: displayNameKey)
                 .limit(to: 1)
                 .getDocuments()
             let profileSnapshot = try await database
-                .collection("publicProfiles")
+                .collection("users")
                 .whereField("pseudo", isEqualTo: trimmedDisplayName)
                 .limit(to: 1)
                 .getDocuments()
@@ -2593,23 +2847,11 @@ private struct ProfileSettingsContent: View {
             .collection("users")
             .document(user.uid)
             .setData(updates, merge: true)
-
-        try await database
-            .collection("publicProfiles")
-            .document(user.uid)
-            .setData([
-                "uid": user.uid,
-                "pseudo": trimmedDisplayName,
-                "pseudoKey": displayNameKey,
-                "avatarID": selectedAvatarID,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], merge: true)
     }
 
     private func deleteUserDocuments() async throws {
         let database = Firestore.firestore()
         try await database.collection("users").document(user.uid).delete()
-        try await database.collection("publicProfiles").document(user.uid).delete()
     }
 
     private func firebaseMessage(for error: Error) -> String {
@@ -2617,7 +2859,18 @@ private struct ProfileSettingsContent: View {
             return profileError.message
         }
 
+        if let authorizationError = error as? ASAuthorizationError,
+           authorizationError.code == .canceled {
+            return "Confirmation Apple annulee."
+        }
+
         let nsError = error as NSError
+        if nsError.domain == AuthErrorDomain,
+           nsError.code == AuthErrorCode.operationNotAllowed.rawValue,
+           nsError.localizedDescription.contains("Code flow is not enabled for Apple") {
+            return "La revocation Apple n'est pas configuree dans Firebase."
+        }
+
         guard let code = AuthErrorCode(rawValue: nsError.code) else {
             return nsError.localizedDescription
         }
@@ -2641,16 +2894,108 @@ private struct ProfileSettingsContent: View {
             return nsError.localizedDescription
         }
     }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            var randomBytes = [UInt8](repeating: 0, count: 16)
+            let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+
+            if status != errSecSuccess {
+                fatalError("Impossible de generer le nonce Apple.")
+            }
+
+            randomBytes.forEach { randomByte in
+                if remainingLength == 0 {
+                    return
+                }
+
+                if randomByte < charset.count {
+                    result.append(charset[Int(randomByte)])
+                    remainingLength -= 1
+                }
+            }
+        }
+
+        return result
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+
+        return hashedData.map {
+            String(format: "%02x", $0)
+        }.joined()
+    }
 }
 
 private enum ProfileSettingsError: Error {
     case displayNameAlreadyTaken
+    case missingAppleIdentityToken
+    case missingAppleAuthorizationCode
+    case missingFirebaseAPIKey
+    case firebaseRESTDeletionFailed
 
     var message: String {
         switch self {
         case .displayNameAlreadyTaken:
             return "Ce nom d'utilisateur est deja pris."
+        case .missingAppleIdentityToken:
+            return "Impossible de recuperer l'identite Apple."
+        case .missingAppleAuthorizationCode:
+            return "Impossible de finaliser la confirmation Apple."
+        case .missingFirebaseAPIKey:
+            return "Configuration Firebase incomplete."
+        case .firebaseRESTDeletionFailed:
+            return "Suppression Firebase impossible."
         }
+    }
+}
+
+private struct AppleDeletionContext {
+    let credential: AuthCredential
+    let authorizationCode: String
+}
+
+private final class ProfileAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    let onSuccess: (ASAuthorizationAppleIDCredential) -> Void
+    let onFailure: (Error) -> Void
+
+    init(
+        onSuccess: @escaping (ASAuthorizationAppleIDCredential) -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
+        self.onSuccess = onSuccess
+        self.onFailure = onFailure
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            onFailure(ProfileSettingsError.missingAppleIdentityToken)
+            return
+        }
+
+        onSuccess(credential)
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        onFailure(error)
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
 
@@ -2663,6 +3008,34 @@ private struct SettingsMenuButton: View {
         Button(title, action: action)
             .buttonStyle(XPButtonStyle(foregroundColor: isDestructive ? .red : .black))
             .frame(maxWidth: .infinity)
+    }
+}
+
+private struct XPToolbarIconButton: View {
+    var systemName: String?
+    var text: String?
+    let accessibilityLabel: String
+    var foregroundColor: Color = .black.opacity(0.78)
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let systemName {
+                    Image(systemName: systemName)
+                        .font(.system(size: 18, weight: .bold))
+                } else {
+                    Text(text ?? "")
+                        .font(.xpTahoma(size: 18, weight: .bold))
+                }
+            }
+            .foregroundStyle(foregroundColor)
+            .frame(width: 34, height: 34)
+            .background(Color.xpChrome)
+            .overlay(Rectangle().stroke(Color.black.opacity(0.5), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -2703,6 +3076,41 @@ private struct SettingsDetailWindow<Content: View>: View {
             }
 
             content
+        }
+        .padding(14)
+        .frame(maxWidth: 330)
+        .background(Color.xpPanel)
+        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+        .shadow(color: .black.opacity(0.32), radius: 8, x: 0, y: 5)
+        .padding(14)
+    }
+}
+
+private struct DeleteAccountConfirmationWindow: View {
+    let cancelAction: () -> Void
+    let confirmAction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Supprimer définitivement ce compte ?")
+                .font(.xpTahoma(size: 18, weight: .bold))
+                .foregroundStyle(.black)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Le compte sera supprimé définitivement.")
+                .font(.xpTahoma(size: 13))
+                .foregroundStyle(.black.opacity(0.78))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button("Annuler", action: cancelAction)
+                    .buttonStyle(XPButtonStyle())
+                    .frame(maxWidth: .infinity)
+
+                Button("Supprimer", action: confirmAction)
+                    .buttonStyle(XPButtonStyle(foregroundColor: .red))
+                    .frame(maxWidth: .infinity)
+            }
         }
         .padding(14)
         .frame(maxWidth: 330)
@@ -2939,12 +3347,17 @@ private struct AvatarBadge: View {
 }
 
 private extension View {
-    func settingsPanel() -> some View {
+    func xpPanelCard(padding: CGFloat = 14) -> some View {
         self
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(padding)
             .background(Color.xpPanel)
             .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+    }
+
+    func settingsPanel() -> some View {
+        self
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .xpPanelCard()
     }
 
     func profileInputStyle() -> some View {

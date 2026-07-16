@@ -11,6 +11,8 @@
 		020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 020732672FFEED2E00721498 /* FirebaseFirestore */; };
 		020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 020732702FFEFCBB00721498 /* GoogleMobileAds */; };
 		025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 025C8937300811370021E547 /* FirebaseAnalytics */; };
+		025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894030086EBC0021E547 /* GoogleSignIn */; };
+		025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894230086EBC0021E547 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +24,13 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+			);
+			target = 000000000000000100000000 /* flechemoica */;
+		};
+		025C8A633008EFA80021E547 /* Exceptions for "FlechemoicaAdmin" folder in "flechemoica" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				".agents/skills/xcode-project-setup/scripts/xcode_spm_setup",
 			);
 			target = 000000000000000100000000 /* flechemoica */;
 		};
@@ -41,14 +50,24 @@
 			path = docs;
 			sourceTree = "<group>";
 		};
+		025C89FD3008EFA70021E547 /* FlechemoicaAdmin */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				025C8A633008EFA80021E547 /* Exceptions for "FlechemoicaAdmin" folder in "flechemoica" target */,
+			);
+			path = FlechemoicaAdmin;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */,
 				020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */,
 				020732632FFED28900721498 /* FirebaseAuth in Frameworks */,
+				025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */,
 				025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */,
 				020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */,
 			);
@@ -59,6 +78,7 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				025C89FD3008EFA70021E547 /* FlechemoicaAdmin */,
 				025940143006866000E7D35C /* docs */,
 				000000000000000000000010 /* flechemoica */,
 				020732662FFEED2E00721498 /* Frameworks */,
@@ -97,6 +117,7 @@
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* flechemoica */,
 				025940143006866000E7D35C /* docs */,
+				025C89FD3008EFA70021E547 /* FlechemoicaAdmin */,
 			);
 			name = flechemoica;
 			packageProductDependencies = (
@@ -104,6 +125,8 @@
 				020732672FFEED2E00721498 /* FirebaseFirestore */,
 				020732702FFEFCBB00721498 /* GoogleMobileAds */,
 				025C8937300811370021E547 /* FirebaseAnalytics */,
+				025C894030086EBC0021E547 /* GoogleSignIn */,
+				025C894230086EBC0021E547 /* GoogleSignInSwift */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* flechemoica.app */;
@@ -136,6 +159,7 @@
 			packageReferences = (
 				020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				0207326F2FFEFCBB00721498 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+				025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 100;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -428,6 +452,14 @@
 				minimumVersion = 13.6.0;
 			};
 		};
+		025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.2.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -450,6 +482,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAnalytics;
+		};
+		025C894030086EBC0021E547 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		025C894230086EBC0021E547 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

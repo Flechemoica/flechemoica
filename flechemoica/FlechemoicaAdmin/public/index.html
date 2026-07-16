@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Flèche-moi ça | ERP</title>
+    <link rel="stylesheet" href="/assets/css/global.css">
+    <link rel="stylesheet" href="/assets/css/login.css">
+    <link rel="stylesheet" href="/assets/css/dashboard.css">
+    <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
+    <script defer src="/__/firebase/init.js"></script>
+    <script defer src="/assets/js/auth.js"></script>
+    <script defer src="/assets/js/login.js"></script>
+    <script defer src="/assets/js/dashboard.js"></script>
+    <script defer src="/assets/js/app.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="login-view" id="login-view" aria-labelledby="login-title">
+        <header class="login-header">
+          <div class="brand-lockup" aria-label="Flèche-moi ça ERP">
+            <span class="brand-mark">F</span>
+            <div>
+              <p class="eyebrow">ERP interne</p>
+              <h1 id="login-title">Flèche-moi ça</h1>
+            </div>
+          </div>
+          <div class="access-state">
+            <span class="state-dot" aria-hidden="true"></span>
+            <span>Accès Editor</span>
+          </div>
+        </header>
+
+        <div class="login-layout">
+          <aside class="access-panel" aria-label="Contexte de connexion">
+            <p class="panel-kicker">Console d'administration</p>
+            <h2>Gestion des grilles et des comptes</h2>
+            <dl class="access-list">
+              <div>
+                <dt>Projet</dt>
+                <dd>flechemoica</dd>
+              </div>
+              <div>
+                <dt>Rôle requis</dt>
+                <dd>Editor</dd>
+              </div>
+              <div>
+                <dt>Authentification</dt>
+                <dd>Firebase</dd>
+              </div>
+            </dl>
+          </aside>
+
+          <form class="login-card" id="login-form">
+            <div class="form-heading">
+              <h2>Connexion</h2>
+              <p>Utilise le compte autorisé pour l'administration.</p>
+            </div>
+
+            <div class="field-group">
+              <label for="email">Adresse e-mail</label>
+              <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
+            </div>
+
+            <div class="field-group">
+              <label for="password">Mot de passe</label>
+              <div class="password-field">
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+                <button class="field-action" id="password-toggle" type="button" aria-controls="password" aria-pressed="false">Afficher</button>
+              </div>
+            </div>
+
+            <button class="primary-button" id="login-button" type="submit">Se connecter</button>
+            <p class="form-message" id="login-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+
+      <section class="dashboard-view is-hidden" id="dashboard-view" aria-labelledby="dashboard-title">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Administration</p>
+            <h1 id="dashboard-title">Tableau de bord</h1>
+          </div>
+          <div class="account-box">
+            <span id="account-email"></span>
+            <button class="ghost-button" id="logout-button" type="button">Déconnexion</button>
+          </div>
+        </header>
+
+        <div class="dashboard-grid">
+          <nav class="sidebar" aria-label="Navigation principale">
+            <button class="nav-item is-active" type="button">Vue générale</button>
+            <button class="nav-item" type="button">Utilisateurs</button>
+            <button class="nav-item" type="button">Contenus</button>
+            <button class="nav-item" type="button">Import JSON</button>
+          </nav>
+
+          <section class="workspace">
+            <div class="workspace-header">
+              <p class="eyebrow">Session Editor</p>
+              <h2>Bienvenue dans l'ERP</h2>
+            </div>
+            <div class="metric-row">
+              <article class="metric-card">
+                <span class="metric-label">Accès</span>
+                <strong>Editor</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Projet</span>
+                <strong>Flèche-moi ça</strong>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

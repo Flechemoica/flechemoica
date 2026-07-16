@@ -1,5 +1,9 @@
+import AuthenticationServices
+import CryptoKit
 import FirebaseAuth
+import FirebaseCore
 import FirebaseFirestore
+import GoogleSignIn
 import SwiftUI
 import UIKit
 import WebKit
@@ -36,6 +40,8 @@ struct AccountSetupView: View {
     @State private var statusText = ""
     @State private var isSubmitting = false
     @State private var isSendingPasswordReset = false
+    @State private var currentAppleSignInNonce: String?
+    @State private var appleSignInCoordinator: AppleSignInCoordinator?
 
     var body: some View {
         GeometryReader { _ in
@@ -95,6 +101,37 @@ struct AccountSetupView: View {
                                     .buttonStyle(XPButtonStyle())
                                     .opacity(canSubmit && !isSubmitting ? 1 : 0.55)
                                     .disabled(!canSubmit || isSubmitting)
+
+                                    HStack(spacing: 10) {
+                                        Button {
+                                            signInWithAppleTapped()
+                                        } label: {
+                                            Image(systemName: "apple.logo")
+                                                .font(.system(size: 24, weight: .semibold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 44, height: 44)
+                                                .background(Color.black)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Continuer avec Apple")
+                                        .opacity(!isSubmitting ? 1 : 0.55)
+                                        .disabled(isSubmitting)
+
+                                        Button {
+                                            signInWithGoogleTapped()
+                                        } label: {
+                                            Text("G")
+                                                .font(.system(size: 23, weight: .bold))
+                                                .foregroundStyle(Color(red: 0.26, green: 0.52, blue: 0.96))
+                                                .frame(width: 44, height: 44)
+                                                .background(Color.white)
+                                                .overlay(Rectangle().stroke(Color.black.opacity(0.28), lineWidth: 1))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .accessibilityLabel("Continuer avec Google")
+                                        .opacity(!isSubmitting ? 1 : 0.55)
+                                        .disabled(isSubmitting)
+                                    }
 
                                     if authMode == .signIn {
                                         Button {
@@ -269,16 +306,6 @@ struct AccountSetupView: View {
                 "createdAt": FieldValue.serverTimestamp()
             ], merge: true)
 
-        try await database
-            .collection("publicProfiles")
-            .document(user.uid)
-            .setData([
-                "uid": user.uid,
-                "pseudo": trimmedPseudo,
-                "pseudoKey": pseudoKey,
-                "avatarID": selectedAvatarID,
-                "createdAt": FieldValue.serverTimestamp()
-            ], merge: true)
     }
 
     private func signIn() async throws {
@@ -290,11 +317,249 @@ struct AccountSetupView: View {
         }
     }
 
+    private func signInWithAppleTapped() {
+        let nonce = randomNonceString()
+        currentAppleSignInNonce = nonce
+        isSubmitting = true
+        statusText = "Connexion avec Apple..."
+
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = sha256(nonce)
+
+        let coordinator = AppleSignInCoordinator(
+            onSuccess: { credential in
+                Task {
+                    await handleAppleSignIn(credential: credential, nonce: nonce)
+                }
+            },
+            onFailure: { error in
+                Task { @MainActor in
+                    isSubmitting = false
+                    appleSignInCoordinator = nil
+
+                    if let authorizationError = error as? ASAuthorizationError,
+                       authorizationError.code == .canceled {
+                        statusText = ""
+                    } else {
+                        statusText = firebaseMessage(for: error)
+                    }
+                }
+            }
+        )
+
+        appleSignInCoordinator = coordinator
+
+        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
+        authorizationController.delegate = coordinator
+        authorizationController.presentationContextProvider = coordinator
+        authorizationController.performRequests()
+    }
+
+    private func signInWithGoogleTapped() {
+        isSubmitting = true
+        statusText = "Connexion avec Google..."
+
+        Task {
+            do {
+                let result = try await signInWithGoogle()
+                try await saveGoogleUserProfile(for: result.user)
+
+                await MainActor.run {
+                    isSubmitting = false
+                    onAuthenticated(result.user)
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                    statusText = firebaseMessage(for: error)
+                }
+            }
+        }
+    }
+
+    private func signInWithGoogle() async throws -> AuthDataResult {
+        guard let clientID = FirebaseApp.app()?.options.clientID else {
+            throw AccountSetupError.missingGoogleClientID
+        }
+
+        guard let presentingViewController = presentingViewController() else {
+            throw AccountSetupError.missingPresentationAnchor
+        }
+
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        let signInResult = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingViewController)
+        let googleUser = signInResult.user
+
+        guard let idToken = googleUser.idToken?.tokenString else {
+            throw AccountSetupError.missingGoogleIdentityToken
+        }
+
+        let credential = GoogleAuthProvider.credential(
+            withIDToken: idToken,
+            accessToken: googleUser.accessToken.tokenString
+        )
+
+        return try await Auth.auth().signIn(with: credential)
+    }
+
+    private func saveGoogleUserProfile(for user: User) async throws {
+        let database = Firestore.firestore()
+        let document = database.collection("users").document(user.uid)
+        let snapshot = try await document.getDocument()
+        let existingData = snapshot.data() ?? [:]
+        let resolvedEmail = user.email ?? ""
+        let resolvedPseudo = user.displayName ?? resolvedEmail.components(separatedBy: "@").first ?? "Utilisateur"
+        let resolvedAvatarID = (existingData["avatarID"] as? String) ?? selectedAvatarID
+
+        var data: [String: Any] = [
+            "uid": user.uid,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if !snapshot.exists {
+            data["createdAt"] = FieldValue.serverTimestamp()
+        }
+
+        if existingData["email"] == nil, !resolvedEmail.isEmpty {
+            data["email"] = resolvedEmail
+            data["emailKey"] = resolvedEmail.lowercased()
+        }
+
+        if existingData["pseudo"] == nil, !resolvedPseudo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmedPseudo = resolvedPseudo.trimmingCharacters(in: .whitespacesAndNewlines)
+            data["pseudo"] = trimmedPseudo
+            data["pseudoKey"] = trimmedPseudo.lowercased()
+        }
+
+        if existingData["avatarID"] == nil {
+            data["avatarID"] = resolvedAvatarID
+        }
+
+        try await document.setData(data, merge: true)
+
+        let avatarURL = URL(string: "flechemoica-avatar://\(resolvedAvatarID)")
+        if user.photoURL != avatarURL {
+            let changeRequest = user.createProfileChangeRequest()
+            changeRequest.photoURL = avatarURL
+            try await changeRequest.commitChanges()
+        }
+    }
+
+    private func handleAppleSignIn(credential appleIDCredential: ASAuthorizationAppleIDCredential, nonce: String) async {
+        do {
+            guard let appleIDToken = appleIDCredential.identityToken,
+                  let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
+                throw AccountSetupError.missingAppleIdentityToken
+            }
+
+            let credential = OAuthProvider.appleCredential(
+                withIDToken: idTokenString,
+                rawNonce: nonce,
+                fullName: appleIDCredential.fullName
+            )
+            let result = try await Auth.auth().signIn(with: credential)
+            let avatarID = try await saveAppleUserProfile(for: result.user, appleCredential: appleIDCredential)
+            try await updateAppleAuthProfileIfNeeded(
+                for: result.user,
+                appleCredential: appleIDCredential,
+                avatarID: avatarID
+            )
+
+            await MainActor.run {
+                isSubmitting = false
+                appleSignInCoordinator = nil
+                onAuthenticated(result.user)
+            }
+        } catch {
+            await MainActor.run {
+                isSubmitting = false
+                appleSignInCoordinator = nil
+                statusText = firebaseMessage(for: error)
+            }
+        }
+    }
+
+    private func saveAppleUserProfile(for user: User, appleCredential: ASAuthorizationAppleIDCredential) async throws -> String {
+        let database = Firestore.firestore()
+        let document = database.collection("users").document(user.uid)
+        let snapshot = try await document.getDocument()
+        let existingData = snapshot.data() ?? [:]
+        let resolvedEmail = user.email ?? appleCredential.email ?? ""
+        let resolvedPseudo = appleDisplayName(from: appleCredential) ?? user.displayName ?? resolvedEmail.components(separatedBy: "@").first ?? "Utilisateur"
+        let resolvedAvatarID = (existingData["avatarID"] as? String) ?? selectedAvatarID
+
+        var data: [String: Any] = [
+            "uid": user.uid,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        if !snapshot.exists {
+            data["createdAt"] = FieldValue.serverTimestamp()
+        }
+
+        if existingData["email"] == nil, !resolvedEmail.isEmpty {
+            data["email"] = resolvedEmail
+            data["emailKey"] = resolvedEmail.lowercased()
+        }
+
+        if existingData["pseudo"] == nil, !resolvedPseudo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let trimmedPseudo = resolvedPseudo.trimmingCharacters(in: .whitespacesAndNewlines)
+            data["pseudo"] = trimmedPseudo
+            data["pseudoKey"] = trimmedPseudo.lowercased()
+        }
+
+        if existingData["avatarID"] == nil {
+            data["avatarID"] = resolvedAvatarID
+        }
+
+        try await document.setData(data, merge: true)
+        return resolvedAvatarID
+    }
+
+    private func updateAppleAuthProfileIfNeeded(
+        for user: User,
+        appleCredential: ASAuthorizationAppleIDCredential,
+        avatarID: String
+    ) async throws {
+        let avatarURL = URL(string: "flechemoica-avatar://\(avatarID)")
+        let displayName = appleDisplayName(from: appleCredential)
+        let needsDisplayName = (user.displayName?.isEmpty ?? true) && displayName != nil
+        let needsAvatar = user.photoURL != avatarURL
+
+        guard needsDisplayName || needsAvatar else {
+            return
+        }
+
+        let changeRequest = user.createProfileChangeRequest()
+        if needsDisplayName {
+            changeRequest.displayName = displayName
+        }
+        if needsAvatar {
+            changeRequest.photoURL = avatarURL
+        }
+
+        try await changeRequest.commitChanges()
+    }
+
+    private func appleDisplayName(from credential: ASAuthorizationAppleIDCredential) -> String? {
+        let formatter = PersonNameComponentsFormatter()
+        let displayName = formatter.string(from: credential.fullName ?? PersonNameComponents())
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return displayName.isEmpty ? nil : displayName
+    }
+
     private var cleanEmail: String {
         email.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func firebaseMessage(for error: Error) -> String {
+        if let accountSetupError = error as? AccountSetupError,
+           let message = accountSetupError.errorDescription {
+            return message
+        }
+
         let nsError = error as NSError
         guard let code = AuthErrorCode(rawValue: nsError.code) else {
             return nsError.localizedDescription
@@ -320,6 +585,120 @@ struct AccountSetupView: View {
         default:
             return nsError.localizedDescription
         }
+    }
+
+    private func randomNonceString(length: Int = 32) -> String {
+        precondition(length > 0)
+
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remainingLength = length
+
+        while remainingLength > 0 {
+            var randomBytes = [UInt8](repeating: 0, count: 16)
+            let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+
+            if status != errSecSuccess {
+                fatalError("Impossible de générer le nonce Apple.")
+            }
+
+            randomBytes.forEach { randomByte in
+                if remainingLength == 0 {
+                    return
+                }
+
+                if randomByte < charset.count {
+                    result.append(charset[Int(randomByte)])
+                    remainingLength -= 1
+                }
+            }
+        }
+
+        return result
+    }
+
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+
+        return hashedData.map {
+            String(format: "%02x", $0)
+        }.joined()
+    }
+
+    private func presentingViewController() -> UIViewController? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .rootViewController?
+            .topMostPresentedViewController()
+    }
+}
+
+private enum AccountSetupError: LocalizedError {
+    case missingAppleIdentityToken
+    case missingGoogleClientID
+    case missingGoogleIdentityToken
+    case missingPresentationAnchor
+
+    var errorDescription: String? {
+        switch self {
+        case .missingAppleIdentityToken:
+            return "Impossible de récupérer l'identité Apple."
+        case .missingGoogleClientID:
+            return "Configuration Google introuvable."
+        case .missingGoogleIdentityToken:
+            return "Impossible de récupérer l'identité Google."
+        case .missingPresentationAnchor:
+            return "Impossible d'ouvrir la connexion Google."
+        }
+    }
+}
+
+private extension UIViewController {
+    func topMostPresentedViewController() -> UIViewController {
+        if let presentedViewController {
+            return presentedViewController.topMostPresentedViewController()
+        }
+
+        return self
+    }
+}
+
+private final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    let onSuccess: (ASAuthorizationAppleIDCredential) -> Void
+    let onFailure: (Error) -> Void
+
+    init(
+        onSuccess: @escaping (ASAuthorizationAppleIDCredential) -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
+        self.onSuccess = onSuccess
+        self.onFailure = onFailure
+    }
+
+    func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+            onFailure(AccountSetupError.missingAppleIdentityToken)
+            return
+        }
+
+        onSuccess(credential)
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        onFailure(error)
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
 
