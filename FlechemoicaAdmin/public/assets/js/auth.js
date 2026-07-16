@@ -95,6 +95,20 @@ const AuthGate = (() => {
       throw new Error("Accès non autorisé.");
     }
 
+    if (profile.emailVerificationStatus === "pending" && !user.emailVerified) {
+      await user.sendEmailVerification();
+      await auth.signOut();
+      throw new Error("E-mail de confirmation envoyé. Veuillez le valider avant d'accéder à l'administration.");
+    }
+
+    if (profile.emailVerificationStatus === "pending" && user.emailVerified && profile.source === "firestore") {
+      await firestore.collection("users").doc(profile.id).update({
+        emailVerificationStatus: "confirmed",
+        emailVerifiedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
     return profile;
   }
 

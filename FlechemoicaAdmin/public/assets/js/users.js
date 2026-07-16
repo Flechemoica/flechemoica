@@ -7,9 +7,15 @@ const UsersView = (() => {
   let users = [];
   let viewLoaded = false;
   let viewLoadPromise = null;
+  let documentClickBound = false;
 
   function init() {
     resolveNodes();
+
+    if (!documentClickBound) {
+      document.addEventListener("click", closeOptionsMenus);
+      documentClickBound = true;
+    }
   }
 
   function resolveNodes() {
@@ -201,24 +207,74 @@ const UsersView = (() => {
 
   function makeActionsCell(id, data) {
     const cell = document.createElement("td");
+    const wrapper = document.createElement("div");
     const button = document.createElement("button");
+    const menu = document.createElement("div");
+    const editorStatusButton = document.createElement("button");
     const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
+    const currentUser = firebase.auth().currentUser;
+    const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
 
     cell.className = "actions-cell";
+    wrapper.className = "options-menu-wrap";
+
     button.className = "options-button";
     button.type = "button";
     button.textContent = "...";
     button.setAttribute("aria-label", `Options pour ${data.pseudo || data.email || "cet utilisateur"}`);
-    button.disabled = isEditor && data.emailVerificationStatus === "pending";
-    button.addEventListener("click", () => promoteToEditor(id, data));
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleOptionsMenu(menu, button);
+    });
 
-    cell.append(button);
+    menu.className = "options-menu is-hidden";
+    menu.setAttribute("role", "menu");
+
+    if (!(isCurrentUser && isEditor)) {
+      editorStatusButton.type = "button";
+      editorStatusButton.setAttribute("role", "menuitem");
+      editorStatusButton.textContent = isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur";
+      editorStatusButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        closeOptionsMenus();
+        if (isEditor) {
+          removeEditorStatus(id, data);
+        } else {
+          promoteToEditor(id, data);
+        }
+      });
+
+      menu.append(editorStatusButton);
+    }
+    wrapper.append(button, menu);
+    cell.append(wrapper);
     return cell;
+  }
+
+  function toggleOptionsMenu(menu, button) {
+    const shouldOpen = menu.classList.contains("is-hidden");
+    closeOptionsMenus();
+
+    if (shouldOpen) {
+      menu.classList.remove("is-hidden");
+      button.setAttribute("aria-expanded", "true");
+    }
+  }
+
+  function closeOptionsMenus() {
+    document.querySelectorAll(".options-menu").forEach((menu) => {
+      menu.classList.add("is-hidden");
+    });
+
+    document.querySelectorAll(".options-button[aria-expanded='true']").forEach((button) => {
+      button.setAttribute("aria-expanded", "false");
+    });
   }
 
   async function promoteToEditor(id, data) {
     const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldPromote = window.confirm(`Passer ${label} en Editor et marquer son e-mail à confirmer ?`);
+    const shouldPromote = window.confirm(`Déclarer ${label} comme Éditeur et marquer son e-mail à confirmer ?`);
     if (!shouldPromote) return;
 
     try {
@@ -232,6 +288,25 @@ const UsersView = (() => {
       setStatus("Utilisateur passé en Editor. E-mail à confirmer.");
     } catch (error) {
       setStatus(error.message || "Impossible de mettre à jour l'utilisateur.", "error");
+    }
+  }
+
+  async function removeEditorStatus(id, data) {
+    const label = data.pseudo || data.email || "cet utilisateur";
+    const shouldRemove = window.confirm(`Retirer le statut Éditeur de ${label} ?`);
+    if (!shouldRemove) return;
+
+    try {
+      setStatus("Mise à jour...");
+      await firestore.collection("users").doc(id).update({
+        status: "Utilisateur",
+        emailVerificationStatus: firebase.firestore.FieldValue.delete(),
+        emailVerificationRequestedAt: firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setStatus("Statut Éditeur retiré.");
+    } catch (error) {
+      setStatus(error.message || "Impossible de retirer le statut Éditeur.", "error");
     }
   }
 

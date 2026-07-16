@@ -15,6 +15,14 @@ const LoginView = (() => {
     button.textContent = isLoading ? "Connexion..." : "Se connecter";
   }
 
+  function show() {
+    form.classList.remove("is-hidden");
+  }
+
+  function hide() {
+    form.classList.add("is-hidden");
+  }
+
   function normalizeEmail(value) {
     return String(value || "").trim().toLowerCase();
   }
@@ -82,5 +90,5 @@ const LoginView = (() => {
 
   }
 
-  return { init, setMessage };
+  return { init, setMessage, show, hide };
 })();

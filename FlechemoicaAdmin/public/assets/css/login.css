@@ -119,6 +119,19 @@
   color: #000000;
 }
 
+.login-card .ghost-button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+#mfa-code-group {
+  margin-top: 16px;
+}
+
+#mfa-recaptcha-container {
+  min-height: 0;
+}
+
 .login-card .primary-button:hover {
   background: var(--accent-dark);
   color: #000000;

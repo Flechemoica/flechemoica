@@ -4,14 +4,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
   AuthGate.onEditorStateChanged(({ user, error }) => {
     if (user) {
+      LoginView.show();
       DashboardView.showDashboard(user);
       return;
     }
 
     DashboardView.showLogin();
 
-    if (error) {
-      LoginView.setMessage("");
-    }
+    if (error) return;
   });
 });
