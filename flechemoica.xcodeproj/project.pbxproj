@@ -27,13 +27,6 @@
 			);
 			target = 000000000000000100000000 /* flechemoica */;
 		};
-		025C8A633008EFA80021E547 /* Exceptions for "FlechemoicaAdmin" folder in "flechemoica" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				".agents/skills/xcode-project-setup/scripts/xcode_spm_setup",
-			);
-			target = 000000000000000100000000 /* flechemoica */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -43,19 +36,6 @@
 				020732762FFEFE1700721498 /* Exceptions for "flechemoica" folder in "flechemoica" target */,
 			);
 			path = flechemoica;
-			sourceTree = "<group>";
-		};
-		025940143006866000E7D35C /* docs */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = docs;
-			sourceTree = "<group>";
-		};
-		025C89FD3008EFA70021E547 /* FlechemoicaAdmin */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				025C8A633008EFA80021E547 /* Exceptions for "FlechemoicaAdmin" folder in "flechemoica" target */,
-			);
-			path = FlechemoicaAdmin;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -78,8 +58,6 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				025C89FD3008EFA70021E547 /* FlechemoicaAdmin */,
-				025940143006866000E7D35C /* docs */,
 				000000000000000000000010 /* flechemoica */,
 				020732662FFEED2E00721498 /* Frameworks */,
 				000000000000000000000020 /* Products */,
@@ -116,8 +94,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* flechemoica */,
-				025940143006866000E7D35C /* docs */,
-				025C89FD3008EFA70021E547 /* FlechemoicaAdmin */,
 			);
 			name = flechemoica;
 			packageProductDependencies = (
