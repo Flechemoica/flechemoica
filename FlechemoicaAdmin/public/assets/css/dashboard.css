@@ -195,8 +195,7 @@
 .users-table-shell {
   width: 100%;
   margin-top: 28px;
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: visible;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -204,27 +203,41 @@
 
 .users-table {
   width: 100%;
-  min-width: 1160px;
-  border-collapse: collapse;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.users-table thead {
+  position: sticky;
+  z-index: 12;
+  top: 110px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 var(--line);
 }
 
 .users-table th,
 .users-table td {
-  padding: 14px 16px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
 }
 
 .users-table th {
+  background: #ffffff;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
 .users-table td {
-  font-size: 0.9rem;
+  font-size: 1rem;
+}
+
+.users-table td > strong {
+  font-size: 1rem;
 }
 
 .users-table td > strong,
@@ -233,11 +246,11 @@
 }
 
 .users-table td > span:not(.status-badge) {
-  max-width: 230px;
-  margin-top: 4px;
+  max-width: 280px;
+  margin-top: 6px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.84rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -283,19 +296,24 @@
 }
 
 .status-badge {
-  display: inline-flex;
+  display: inline-grid;
   width: fit-content;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  border: 1px solid #dbe3ec;
-  border-radius: 6px;
-  background: #f7f9fc;
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 800;
-  line-height: 1;
+  height: 24px;
+  place-items: center;
+  padding: 0 9px;
+  border: 1px solid #dfe6ef;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #38465a;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.provider-badge {
+  background: #ffffff;
+  color: #4f5f76;
 }
 
 .role-cell .status-badge {
@@ -303,13 +321,13 @@
 }
 
 .options-button {
-  width: 34px;
-  height: 30px;
+  width: 38px;
+  height: 34px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #ffffff;
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 1.08rem;
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
@@ -330,7 +348,7 @@
   z-index: 30;
   top: calc(100% + 6px);
   right: 0;
-  min-width: 180px;
+  min-width: 210px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -340,14 +358,14 @@
 
 .options-menu button {
   width: 100%;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.92rem;
   font-weight: 800;
   text-align: left;
   cursor: pointer;
