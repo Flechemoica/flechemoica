@@ -1,7 +1,5 @@
 .dashboard-view {
-  height: 100vh;
   min-height: 100vh;
-  overflow: hidden;
   padding-top: 110px;
 }
 
@@ -93,9 +91,8 @@
 }
 
 .workspace {
-  height: calc(100vh - 110px);
+  min-height: calc(100vh - 110px);
   margin-left: 260px;
-  overflow: auto;
   padding: clamp(24px, 5vw, 48px);
 }
 
@@ -198,7 +195,8 @@
 .users-table-shell {
   width: 100%;
   margin-top: 28px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -206,7 +204,7 @@
 
 .users-table {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1160px;
   border-collapse: collapse;
 }
 
@@ -357,6 +355,14 @@
 
 .options-menu button:hover {
   background: #f3f6fa;
+}
+
+.options-menu button[data-tone="danger"] {
+  color: var(--danger);
+}
+
+.options-menu button[data-tone="danger"]:hover {
+  background: #fff4f1;
 }
 
 .options-menu button:disabled {

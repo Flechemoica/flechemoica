@@ -1,10 +1,12 @@
 const UsersView = (() => {
   let unsubscribe = null;
   let firestore = null;
+  let functions = null;
   let tableBody = null;
   let statusNode = null;
   let searchInput = null;
   let users = [];
+  let authMetadata = new Map();
   let viewLoaded = false;
   let viewLoadPromise = null;
   let documentClickBound = false;
@@ -70,6 +72,7 @@ const UsersView = (() => {
 
       const services = AuthGate.ensureFirebase();
       firestore = services.firestore;
+      functions = firebase.functions ? firebase.app().functions("europe-west1") : null;
 
       if (!firestore) {
         setStatus("Firestore indisponible.", "error");
@@ -85,6 +88,7 @@ const UsersView = (() => {
             users = snapshot.docs;
             renderUsers(filterUsers());
             setStatus("");
+            loadAuthMetadata(snapshot.docs);
           },
           (error) => {
             setStatus(error.message || "Impossible de charger les utilisateurs.", "error");
@@ -110,7 +114,7 @@ const UsersView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.className = "empty-cell";
       cell.textContent = "Aucun utilisateur.";
       row.append(cell);
@@ -152,6 +156,7 @@ const UsersView = (() => {
     row.append(
       makeIdentityCell(id, data),
       makeEmailCell(data),
+      makeProviderCell(id, data),
       makeStatusCell(data.status || data.role || "Utilisateur"),
       makeTextCell(formatValue(data.createdAt)),
       makeActionsCell(id, data)
@@ -192,6 +197,13 @@ const UsersView = (() => {
       cell.append(verification);
     }
 
+    if (data.accountStatus === "disabled") {
+      const disabled = document.createElement("span");
+      disabled.className = "email-pending";
+      disabled.textContent = "Compte désactivé";
+      cell.append(disabled);
+    }
+
     return cell;
   }
 
@@ -205,13 +217,23 @@ const UsersView = (() => {
     return cell;
   }
 
+  function makeProviderCell(id, data) {
+    const cell = document.createElement("td");
+    const badge = document.createElement("span");
+    const metadata = authMetadata.get(data.uid || id);
+    badge.className = "status-badge provider-badge";
+    badge.textContent = formatProviders(metadata?.providers || getFallbackProviders(data));
+    cell.append(badge);
+    return cell;
+  }
+
   function makeActionsCell(id, data) {
     const cell = document.createElement("td");
     const wrapper = document.createElement("div");
     const button = document.createElement("button");
     const menu = document.createElement("div");
-    const editorStatusButton = document.createElement("button");
     const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
+    const isDisabled = data.accountStatus === "disabled";
     const currentUser = firebase.auth().currentUser;
     const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
 
@@ -231,25 +253,49 @@ const UsersView = (() => {
     menu.className = "options-menu is-hidden";
     menu.setAttribute("role", "menu");
 
+    menu.append(
+      createMenuButton("Réinitialiser le mot de passe", () => resetPassword(id, data))
+    );
+
+    if (!isCurrentUser) {
+      menu.append(
+        createMenuButton(
+          isDisabled ? "Réactiver le compte" : "Désactiver le compte",
+          () => setAccountDisabled(id, data, !isDisabled)
+        ),
+        createMenuButton("Supprimer le compte", () => deleteAccount(id, data), "danger")
+      );
+    }
+
     if (!(isCurrentUser && isEditor)) {
-      editorStatusButton.type = "button";
-      editorStatusButton.setAttribute("role", "menuitem");
-      editorStatusButton.textContent = isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur";
-      editorStatusButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        closeOptionsMenus();
+      menu.append(
+        createMenuButton(isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur", () => {
         if (isEditor) {
           removeEditorStatus(id, data);
         } else {
           promoteToEditor(id, data);
         }
-      });
-
-      menu.append(editorStatusButton);
+        })
+      );
     }
+
     wrapper.append(button, menu);
     cell.append(wrapper);
     return cell;
+  }
+
+  function createMenuButton(label, action, tone = "") {
+    const menuButton = document.createElement("button");
+    menuButton.type = "button";
+    menuButton.setAttribute("role", "menuitem");
+    menuButton.textContent = label;
+    if (tone) menuButton.dataset.tone = tone;
+    menuButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeOptionsMenus();
+      action();
+    });
+    return menuButton;
   }
 
   function toggleOptionsMenu(menu, button) {
@@ -288,6 +334,130 @@ const UsersView = (() => {
       setStatus("Utilisateur passé en Editor. E-mail à confirmer.");
     } catch (error) {
       setStatus(error.message || "Impossible de mettre à jour l'utilisateur.", "error");
+    }
+  }
+
+  async function loadAuthMetadata(docs) {
+    if (!functions) return;
+
+    const uids = docs
+      .map((doc) => String(doc.data().uid || doc.id || "").trim())
+      .filter(Boolean);
+
+    if (!uids.length) return;
+
+    try {
+      const response = await functions.httpsCallable("adminUsersMeta")({ uids });
+      authMetadata = new Map(
+        (response.data?.users || []).map((user) => [user.uid, user])
+      );
+      renderUsers(filterUsers());
+    } catch (error) {
+      console.warn("Impossible de charger les métadonnées Auth.", error);
+    }
+  }
+
+  function getFallbackProviders(data) {
+    const rawProvider = data.providerId || data.signInProvider || data.provider || data.authProvider;
+    if (Array.isArray(rawProvider)) return rawProvider;
+    if (rawProvider) return [rawProvider];
+    return data.email || data.emailKey ? ["password"] : [];
+  }
+
+  function formatProviders(providers) {
+    const labels = [...new Set(providers.map(formatProvider).filter(Boolean))];
+    return labels.length ? labels.join(", ") : "-";
+  }
+
+  function formatProvider(provider) {
+    const normalized = String(provider || "").toLowerCase();
+
+    if (normalized === "password" || normalized === "email" || normalized === "emailpassword") {
+      return "E-mail";
+    }
+
+    if (normalized === "google.com" || normalized === "google") {
+      return "Google";
+    }
+
+    if (normalized === "apple.com" || normalized === "apple") {
+      return "Apple";
+    }
+
+    if (normalized === "phone" || normalized === "phone.com") {
+      return "Téléphone";
+    }
+
+    return provider ? String(provider) : "";
+  }
+
+  async function resetPassword(id, data) {
+    const email = String(data.email || data.emailKey || "").trim();
+    if (!email) {
+      setStatus("Aucune adresse e-mail disponible pour cet utilisateur.", "error");
+      return;
+    }
+
+    const label = data.pseudo || email;
+    const shouldReset = window.confirm(`Envoyer un e-mail de réinitialisation du mot de passe à ${label} ?`);
+    if (!shouldReset) return;
+
+    try {
+      setStatus("Envoi de l'e-mail...");
+      await firebase.auth().sendPasswordResetEmail(email);
+      await firestore.collection("users").doc(id).update({
+        passwordResetRequestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setStatus("E-mail de réinitialisation envoyé.");
+    } catch (error) {
+      setStatus(error.message || "Impossible d'envoyer l'e-mail de réinitialisation.", "error");
+    }
+  }
+
+  async function setAccountDisabled(id, data, shouldDisable) {
+    if (!functions) {
+      setStatus("Cloud Functions indisponible.", "error");
+      return;
+    }
+
+    const label = data.pseudo || data.email || "cet utilisateur";
+    const message = shouldDisable
+      ? `Désactiver le compte de ${label} ? Il ne pourra plus se connecter.`
+      : `Réactiver le compte de ${label} ?`;
+    if (!window.confirm(message)) return;
+
+    try {
+      setStatus(shouldDisable ? "Désactivation..." : "Réactivation...");
+      await functions.httpsCallable("adminUserAction")({
+        action: shouldDisable ? "disable" : "enable",
+        targetDocId: id,
+      });
+      setStatus(shouldDisable ? "Compte désactivé." : "Compte réactivé.");
+    } catch (error) {
+      setStatus(error.message || "Impossible de mettre à jour le compte.", "error");
+    }
+  }
+
+  async function deleteAccount(id, data) {
+    if (!functions) {
+      setStatus("Cloud Functions indisponible.", "error");
+      return;
+    }
+
+    const label = data.pseudo || data.email || "cet utilisateur";
+    const shouldDelete = window.confirm(`Supprimer définitivement le compte de ${label} ? Cette action supprimera aussi son accès Firebase Auth.`);
+    if (!shouldDelete) return;
+
+    try {
+      setStatus("Suppression...");
+      await functions.httpsCallable("adminUserAction")({
+        action: "delete",
+        targetDocId: id,
+      });
+      setStatus("Compte supprimé.");
+    } catch (error) {
+      setStatus(error.message || "Impossible de supprimer le compte.", "error");
     }
   }
 
