@@ -39,6 +39,7 @@ struct HomeView: View {
     @State private var emailOverride: String?
     @State private var photoURLOverride: URL?
     @State private var isDeletingAccount = false
+    @State private var hasRecordedAppLaunch = false
 
     private var displayName: String {
         if let displayNameOverride, !displayNameOverride.isEmpty {
@@ -158,6 +159,7 @@ struct HomeView: View {
                         )
                     } else {
                         HomeContent(
+                            userID: user.uid,
                             displayName: displayName,
                             avatarName: avatarName,
                             isEditor: isEditor,
@@ -248,6 +250,7 @@ struct HomeView: View {
                 document: document,
                 storedEmail: userData?["email"] as? String
             )
+            await recordAppLaunchIfNeeded(document: document)
         } catch {
             return
         }
@@ -270,6 +273,19 @@ struct HomeView: View {
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
             emailOverride = authEmail
+        } catch {
+            return
+        }
+    }
+
+    private func recordAppLaunchIfNeeded(document: DocumentReference) async {
+        guard !isDeletingAccount, !hasRecordedAppLaunch else { return }
+        hasRecordedAppLaunch = true
+
+        do {
+            try await document.setData([
+                "lastAppLaunchAt": FieldValue.serverTimestamp()
+            ], merge: true)
         } catch {
             return
         }
@@ -381,6 +397,7 @@ struct HomeView: View {
         Task {
             await rewardedGridAccessAd.showAd(
                 adUnitID: "ca-app-pub-1003964550278910/8860825770",
+                userID: user.uid,
                 customData: "grid_\(selectedPublishedGrid.id)"
             ) { earnedReward in
                 guard earnedReward else {
@@ -533,6 +550,7 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
     private var rewardedAd: RewardedAd?
     private var pendingRewardCompletion: ((Bool) -> Void)?
     private var didEarnReward = false
+    private var statsUserID: String?
 
     private var effectiveAdUnitID: String {
         AdMobConfiguration.rewardedAdUnitID(productionID: productionAdUnitID ?? "")
@@ -543,11 +561,13 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
 
     func showAd(
         adUnitID: String,
+        userID: String,
         customData: String,
         rewarded: @escaping (Bool) -> Void
     ) async {
         #if canImport(GoogleMobileAds)
         productionAdUnitID = adUnitID
+        statsUserID = userID
         message = nil
 
         do {
@@ -611,6 +631,18 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
 
 #if canImport(GoogleMobileAds)
 extension RewardedGridAccessAd: FullScreenContentDelegate {
+    nonisolated func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
+        Task { @MainActor in
+            AdStatsRecorder.record(userID: statsUserID, placement: "rewarded", event: "impression")
+        }
+    }
+
+    nonisolated func adDidRecordClick(_ ad: FullScreenPresentingAd) {
+        Task { @MainActor in
+            AdStatsRecorder.record(userID: statsUserID, placement: "rewarded", event: "click")
+        }
+    }
+
     nonisolated func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         Task { @MainActor in
             finishRewardFlow(earnedReward: didEarnReward)
@@ -873,6 +905,7 @@ private struct PublicProfile: Identifiable {
 }
 
 private struct HomeContent: View {
+    let userID: String
     let displayName: String
     let avatarName: String
     let isEditor: Bool
@@ -917,7 +950,7 @@ private struct HomeContent: View {
                 playAction: playGridAction
             )
 
-            HomeNativeAdCard(adUnitID: "ca-app-pub-1003964550278910/3236151939")
+            HomeNativeAdCard(adUnitID: "ca-app-pub-1003964550278910/3236151939", userID: userID)
 
             Spacer(minLength: 0)
 

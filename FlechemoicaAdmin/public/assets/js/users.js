@@ -10,6 +10,7 @@ const UsersView = (() => {
   let detailStatus = null;
   let accountDetails = null;
   let detailActions = null;
+  let adStatsDetails = null;
   let playedGridsBody = null;
   let completedGridsBody = null;
   let unlockedGridsBody = null;
@@ -37,6 +38,7 @@ const UsersView = (() => {
     detailStatus = document.getElementById("user-detail-status");
     accountDetails = document.getElementById("user-account-details");
     detailActions = document.getElementById("user-detail-actions");
+    adStatsDetails = document.getElementById("user-ad-stats");
     playedGridsBody = document.getElementById("user-played-grids");
     completedGridsBody = document.getElementById("user-completed-grids");
     unlockedGridsBody = document.getElementById("user-unlocked-grids");
@@ -147,7 +149,7 @@ const UsersView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 6;
+      cell.colSpan = 7;
       cell.className = "empty-cell";
       cell.textContent = "Aucun utilisateur.";
       row.append(cell);
@@ -197,6 +199,7 @@ const UsersView = (() => {
       makeEmailCell(data),
       makeProviderCell(id, data),
       makeStatusCell(data.status || data.role || "Utilisateur"),
+      makeTextCell(formatValue(data.lastAppLaunchAt)),
       makeTextCell(formatValue(data.createdAt)),
       makeActionsCell(id, data)
     );
@@ -261,7 +264,30 @@ const UsersView = (() => {
 
     await renderAccountDetails(id, data);
     renderDetailActions(id, data);
+    renderAdStats(data.adStats);
     await renderGridActivity(data);
+  }
+
+  function renderAdStats(adStats) {
+    if (!adStatsDetails) return;
+
+    const stats = getObject(adStats);
+    const details = [
+      ["Impressions totales", stats.totalImpressions || 0],
+      ["Clics totaux", stats.totalClicks || 0],
+      ["Impressions natives", stats.nativeImpressions || 0],
+      ["Clics natives", stats.nativeClicks || 0],
+      ["Impressions rewarded", stats.rewardedImpressions || 0],
+      ["Clics rewarded", stats.rewardedClicks || 0],
+    ];
+
+    adStatsDetails.replaceChildren(...details.flatMap(([label, value]) => {
+      const term = document.createElement("dt");
+      const description = document.createElement("dd");
+      term.textContent = label;
+      description.textContent = value;
+      return [term, description];
+    }));
   }
 
   async function renderAccountDetails(id, data) {
@@ -273,6 +299,7 @@ const UsersView = (() => {
       ["E-mail", data.email || data.emailKey || "-"],
       ["Connexion", formatProviders(metadata?.providers || getFallbackProviders(data))],
       ["Rôle", data.status || data.role || "Utilisateur"],
+      ["Dernier lancement", formatValue(data.lastAppLaunchAt)],
       ["Création", formatValue(data.createdAt)],
       ["Mise à jour", formatValue(data.updatedAt)],
       ["Statut du compte", data.accountStatus === "disabled" ? "Désactivé" : "Actif"],
@@ -593,7 +620,9 @@ const UsersView = (() => {
 
   async function promoteToEditor(id, data) {
     const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldPromote = window.confirm(`Déclarer ${label} comme Éditeur et marquer son e-mail à confirmer ?`);
+    const shouldPromote = await confirmSensitiveAction(
+      `Déclarer ${label} comme Éditeur et marquer son e-mail à confirmer ?`
+    );
     if (!shouldPromote) return;
 
     try {
@@ -698,7 +727,10 @@ const UsersView = (() => {
     const message = shouldDisable
       ? `Désactiver le compte de ${label} ? Il ne pourra plus se connecter.`
       : `Réactiver le compte de ${label} ?`;
-    if (!window.confirm(message)) return;
+    const shouldContinue = shouldDisable
+      ? await confirmSensitiveAction(message)
+      : window.confirm(message);
+    if (!shouldContinue) return;
 
     try {
       setStatus(shouldDisable ? "Désactivation..." : "Réactivation...");
@@ -719,7 +751,9 @@ const UsersView = (() => {
     }
 
     const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldDelete = window.confirm(`Supprimer définitivement le compte de ${label} ? Cette action supprimera aussi son accès Firebase Auth.`);
+    const shouldDelete = await confirmSensitiveAction(
+      `Supprimer définitivement le compte de ${label} ? Cette action supprimera aussi son accès Firebase Auth.`
+    );
     if (!shouldDelete) return;
 
     try {
@@ -736,7 +770,7 @@ const UsersView = (() => {
 
   async function removeEditorStatus(id, data) {
     const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldRemove = window.confirm(`Retirer le statut Éditeur de ${label} ?`);
+    const shouldRemove = await confirmSensitiveAction(`Retirer le statut Éditeur de ${label} ?`);
     if (!shouldRemove) return;
 
     try {
@@ -751,6 +785,101 @@ const UsersView = (() => {
     } catch (error) {
       setStatus(error.message || "Impossible de retirer le statut Éditeur.", "error");
     }
+  }
+
+  async function confirmSensitiveAction(message) {
+    if (!window.confirm(message)) return false;
+
+    const password = await requestAdminPassword();
+    if (password === null) return false;
+
+    try {
+      await reauthenticateCurrentAdmin(password);
+      return true;
+    } catch (error) {
+      setStatus(getReauthenticationErrorMessage(error), "error");
+      return false;
+    }
+  }
+
+  async function reauthenticateCurrentAdmin(password) {
+    const user = firebase.auth().currentUser;
+    const email = user?.email;
+
+    if (!user || !email) {
+      throw new Error("Session administrateur introuvable.");
+    }
+
+    if (!String(password || "").trim()) {
+      throw new Error("Mot de passe requis.");
+    }
+
+    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  function getReauthenticationErrorMessage(error) {
+    const code = error?.code || "";
+
+    if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      return "Mot de passe administrateur incorrect.";
+    }
+
+    if (code === "auth/too-many-requests") {
+      return "Trop de tentatives. Réessaie plus tard.";
+    }
+
+    return error?.message || "Confirmation administrateur impossible.";
+  }
+
+  function requestAdminPassword() {
+    return new Promise((resolve) => {
+      const dialog = document.createElement("dialog");
+      const form = document.createElement("form");
+      const title = document.createElement("h3");
+      const description = document.createElement("p");
+      const input = document.createElement("input");
+      const actions = document.createElement("div");
+      const cancelButton = document.createElement("button");
+      const confirmButton = document.createElement("button");
+
+      dialog.className = "sensitive-dialog";
+      form.method = "dialog";
+      title.textContent = "Confirmation administrateur";
+      description.textContent = "Entre ton mot de passe pour continuer.";
+      input.type = "password";
+      input.autocomplete = "current-password";
+      input.required = true;
+      input.placeholder = "Mot de passe";
+      actions.className = "sensitive-dialog-actions";
+      cancelButton.type = "button";
+      cancelButton.className = "ghost-button";
+      cancelButton.textContent = "Annuler";
+      confirmButton.type = "submit";
+      confirmButton.className = "primary-button compact-save-button";
+      confirmButton.textContent = "Confirmer";
+
+      cancelButton.addEventListener("click", () => {
+        dialog.close();
+        dialog.remove();
+        resolve(null);
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const password = input.value;
+        dialog.close();
+        dialog.remove();
+        resolve(password);
+      });
+
+      actions.append(cancelButton, confirmButton);
+      form.append(title, description, input, actions);
+      dialog.append(form);
+      document.body.append(dialog);
+      dialog.showModal();
+      input.focus();
+    });
   }
 
   function formatValue(value) {

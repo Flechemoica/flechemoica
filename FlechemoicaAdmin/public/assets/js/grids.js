@@ -22,6 +22,7 @@ const GridsView = (() => {
   let detailStatusBadge = null;
   let detailStatus = null;
   let detailReleaseInput = null;
+  let detailActions = null;
   let previewNode = null;
   let editorForm = null;
   let editorList = null;
@@ -66,6 +67,7 @@ const GridsView = (() => {
     detailStatusBadge = document.getElementById("grid-detail-status-badge");
     detailStatus = document.getElementById("grid-detail-status");
     detailReleaseInput = document.getElementById("grid-detail-release");
+    detailActions = document.getElementById("grid-detail-actions");
     previewNode = document.getElementById("grid-preview");
     editorForm = document.getElementById("grid-editor-form");
     editorList = document.getElementById("grid-editor-list");
@@ -574,7 +576,10 @@ const GridsView = (() => {
     const message = shouldBlock
       ? `Bloquer l'accès à ${title} ? Elle ne sera plus visible dans l'application.`
       : `Débloquer l'accès à ${title} ?`;
-    if (!window.confirm(message)) return;
+    const shouldContinue = shouldBlock
+      ? await confirmSensitiveAction(message)
+      : window.confirm(message);
+    if (!shouldContinue) return;
 
     const releaseDate = getDateFromValue(data.releaseAt);
     const restoredStatus = releaseDate && releaseDate > new Date() ? "scheduled" : "published";
@@ -586,6 +591,11 @@ const GridsView = (() => {
         accessBlockedAt: shouldBlock ? firebase.firestore.FieldValue.serverTimestamp() : firebase.firestore.FieldValue.delete(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
+      if (currentDetailID === id) {
+        const nextData = { ...data, status: shouldBlock ? "blocked" : restoredStatus };
+        renderStatusBadge(detailStatusBadge, nextData.status);
+        renderGridDetailActions(id, nextData);
+      }
       setStatus(shouldBlock ? "Accès bloqué." : "Accès débloqué.");
     } catch (error) {
       setStatus(error.message || "Impossible de modifier l'accès.", "error");
@@ -594,15 +604,115 @@ const GridsView = (() => {
 
   async function deleteGrid(id, data) {
     const title = data.title || "cette grille";
-    if (!window.confirm(`Supprimer définitivement ${title} ?`)) return;
+    const shouldDelete = await confirmSensitiveAction(`Supprimer définitivement ${title} ?`);
+    if (!shouldDelete) return;
 
     try {
       setStatus("Suppression...");
       await firestore.collection("grids").doc(id).delete();
       setStatus("Grille supprimée.");
+      if (currentDetailID === id) {
+        currentDetailID = "";
+        document.querySelector("[data-panel-target='grids-panel']")?.click();
+      }
     } catch (error) {
       setStatus(error.message || "Impossible de supprimer la grille.", "error");
     }
+  }
+
+  async function confirmSensitiveAction(message) {
+    if (!window.confirm(message)) return false;
+
+    const password = await requestAdminPassword();
+    if (password === null) return false;
+
+    try {
+      await reauthenticateCurrentAdmin(password);
+      return true;
+    } catch (error) {
+      setStatus(getReauthenticationErrorMessage(error), "error");
+      return false;
+    }
+  }
+
+  async function reauthenticateCurrentAdmin(password) {
+    const user = firebase.auth().currentUser;
+    const email = user?.email;
+
+    if (!user || !email) {
+      throw new Error("Session administrateur introuvable.");
+    }
+
+    if (!String(password || "").trim()) {
+      throw new Error("Mot de passe requis.");
+    }
+
+    const credential = firebase.auth.EmailAuthProvider.credential(email, password);
+    await user.reauthenticateWithCredential(credential);
+  }
+
+  function getReauthenticationErrorMessage(error) {
+    const code = error?.code || "";
+
+    if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      return "Mot de passe administrateur incorrect.";
+    }
+
+    if (code === "auth/too-many-requests") {
+      return "Trop de tentatives. Réessaie plus tard.";
+    }
+
+    return error?.message || "Confirmation administrateur impossible.";
+  }
+
+  function requestAdminPassword() {
+    return new Promise((resolve) => {
+      const dialog = document.createElement("dialog");
+      const form = document.createElement("form");
+      const title = document.createElement("h3");
+      const description = document.createElement("p");
+      const input = document.createElement("input");
+      const actions = document.createElement("div");
+      const cancelButton = document.createElement("button");
+      const confirmButton = document.createElement("button");
+
+      dialog.className = "sensitive-dialog";
+      form.method = "dialog";
+      title.textContent = "Confirmation administrateur";
+      description.textContent = "Entre ton mot de passe pour continuer.";
+      input.type = "password";
+      input.autocomplete = "current-password";
+      input.required = true;
+      input.placeholder = "Mot de passe";
+      actions.className = "sensitive-dialog-actions";
+      cancelButton.type = "button";
+      cancelButton.className = "ghost-button";
+      cancelButton.textContent = "Annuler";
+      confirmButton.type = "submit";
+      confirmButton.className = "primary-button compact-save-button";
+      confirmButton.textContent = "Confirmer";
+
+      cancelButton.addEventListener("click", () => {
+        dialog.close();
+        dialog.remove();
+        resolve(null);
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const password = input.value;
+        dialog.close();
+        dialog.remove();
+        resolve(password);
+      });
+
+      actions.append(cancelButton, confirmButton);
+      form.append(title, description, input, actions);
+      dialog.append(form);
+      document.body.append(dialog);
+      dialog.showModal();
+      input.focus();
+    });
   }
 
   function openGridDetail(gridID) {
@@ -629,7 +739,56 @@ const GridsView = (() => {
     }
     setDetailStatus("");
     renderGridPreview(grid);
+    renderGridDetailActions(doc.id, data);
     renderGridEditor(placedWords);
+  }
+
+  function renderGridDetailActions(id, data) {
+    if (!detailActions) return;
+
+    const isBlocked = normalizeStatus(data.status) === "blocked";
+    detailActions.replaceChildren(
+      makeDetailActionButton("Publier maintenant", () => publishGridNow(id, data)),
+      makeDetailActionButton(
+        isBlocked ? "Débloquer l'accès" : "Bloquer l'accès",
+        () => setGridAccessBlocked(id, data, !isBlocked)
+      ),
+      makeDetailActionButton("Supprimer la grille", () => deleteGrid(id, data), "danger")
+    );
+  }
+
+  function makeDetailActionButton(label, action, tone = "") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = tone === "danger" ? "ghost-button detail-danger-button" : "ghost-button";
+    button.textContent = label;
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  async function publishGridNow(id, data) {
+    const title = data.title || "cette grille";
+    if (!window.confirm(`Publier ${title} maintenant ?`)) return;
+
+    const now = new Date();
+    try {
+      setDetailStatus("Publication...");
+      await firestore.collection("grids").doc(id).set({
+        status: "published",
+        releaseAt: firebase.firestore.Timestamp.fromDate(now),
+        weekId: getISOWeekID(now),
+        accessBlockedAt: firebase.firestore.FieldValue.delete(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      if (detailReleaseInput) {
+        detailReleaseInput.value = formatDateTimeLocal(now);
+      }
+      renderStatusBadge(detailStatusBadge, "published");
+      renderGridDetailActions(id, { ...data, status: "published" });
+      setDetailStatus("Grille publiée.");
+    } catch (error) {
+      setDetailStatus(error.message || "Impossible de publier la grille.", "error");
+    }
   }
 
   async function getGridDoc(gridID) {

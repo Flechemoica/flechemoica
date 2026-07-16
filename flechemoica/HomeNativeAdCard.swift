@@ -1,18 +1,42 @@
 import SwiftUI
 import UIKit
 import Combine
+import FirebaseFirestore
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
 
+enum AdStatsRecorder {
+    static func record(userID: String?, placement: String, event: String) {
+        guard let userID, !userID.isEmpty else { return }
+
+        let placementKey = placement == "rewarded" ? "rewarded" : "native"
+        let eventKey = event == "click" ? "Clicks" : "Impressions"
+        let totalKey = event == "click" ? "totalClicks" : "totalImpressions"
+
+        Firestore.firestore()
+            .collection("users")
+            .document(userID)
+            .setData([
+                "adStats": [
+                    totalKey: FieldValue.increment(Int64(1)),
+                    "\(placementKey)\(eventKey)": FieldValue.increment(Int64(1))
+                ],
+                "adStatsUpdatedAt": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp()
+            ], merge: true)
+    }
+}
+
 struct HomeNativeAdCard: View {
     let adUnitID: String
+    let userID: String
 
     var body: some View {
         #if canImport(GoogleMobileAds)
         if Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") != nil {
-            NativeAdContainer(adUnitID: adUnitID)
+            NativeAdContainer(adUnitID: adUnitID, userID: userID)
         } else {
             NativeAdPlaceholder(message: "ID application AdMob manquant dans Info.plist.")
         }
@@ -64,6 +88,7 @@ private struct AdBadgeIcon: View {
 #if canImport(GoogleMobileAds)
 private struct NativeAdContainer: View {
     let adUnitID: String
+    let userID: String
     @StateObject private var loader = NativeAdLoader()
 
     private var effectiveAdUnitID: String {
@@ -84,7 +109,7 @@ private struct NativeAdContainer: View {
         .onAppear {
             Task {
                 await AdMobConfiguration.refreshTestAdsStatus()
-                loader.load(adUnitID: effectiveAdUnitID)
+                loader.load(adUnitID: effectiveAdUnitID, userID: userID)
             }
         }
     }
@@ -98,12 +123,14 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
     private var adLoader: AdLoader?
     private var isLoading = false
     private var retryCount = 0
+    private var statsUserID: String?
 
-    func load(adUnitID: String) {
+    func load(adUnitID: String, userID: String) {
         guard nativeAd == nil, !isLoading else {
             return
         }
 
+        statsUserID = userID
         isLoading = true
         placeholderMessage = "Chargement de l'annonce native AdMob..."
 
@@ -150,6 +177,7 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
 
     nonisolated func adLoader(_ adLoader: AdLoader, didReceive nativeAd: NativeAd) {
         Task { @MainActor in
+            nativeAd.delegate = self
             self.nativeAd = nativeAd
             self.isLoading = false
             self.retryCount = 0
@@ -162,6 +190,20 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
             self.isLoading = false
             self.retryCount = 0
             self.placeholderMessage = "Annonce indisponible: \(error.localizedDescription)"
+        }
+    }
+}
+
+extension NativeAdLoader: NativeAdDelegate {
+    nonisolated func nativeAdDidRecordImpression(_ nativeAd: NativeAd) {
+        Task { @MainActor in
+            AdStatsRecorder.record(userID: statsUserID, placement: "native", event: "impression")
+        }
+    }
+
+    nonisolated func nativeAdDidRecordClick(_ nativeAd: NativeAd) {
+        Task { @MainActor in
+            AdStatsRecorder.record(userID: statsUserID, placement: "native", event: "click")
         }
     }
 }
