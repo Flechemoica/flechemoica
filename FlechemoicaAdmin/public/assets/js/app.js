@@ -11,7 +11,7 @@ window.addEventListener("DOMContentLoaded", () => {
     DashboardView.showLogin();
 
     if (error) {
-      LoginView.setMessage(error.message, "error");
+      LoginView.setMessage("");
     }
   });
 });

@@ -4,7 +4,6 @@ const LoginView = (() => {
   const passwordInput = document.getElementById("password");
   const button = document.getElementById("login-button");
   const message = document.getElementById("login-message");
-  const passwordToggle = document.getElementById("password-toggle");
 
   function setMessage(text, tone = "neutral") {
     message.textContent = text;
@@ -26,6 +25,7 @@ const LoginView = (() => {
 
   function mapAuthError(error) {
     const code = error && error.code;
+    const message = error && error.message;
 
     if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
       return "Adresse e-mail ou mot de passe incorrect.";
@@ -39,7 +39,11 @@ const LoginView = (() => {
       return "Trop de tentatives. Reessaie dans quelques minutes.";
     }
 
-    return error.message || "Connexion impossible pour le moment.";
+    if (code === "permission-denied" || message === "Missing or insufficient permissions.") {
+      return "Accès non autorisé.";
+    }
+
+    return message || "Connexion impossible pour le moment.";
   }
 
   function init() {
@@ -76,15 +80,6 @@ const LoginView = (() => {
       }
     });
 
-    if (passwordToggle) {
-      passwordToggle.addEventListener("click", () => {
-        const shouldShowPassword = passwordInput.type === "password";
-        passwordInput.type = shouldShowPassword ? "text" : "password";
-        passwordToggle.textContent = shouldShowPassword ? "Masquer" : "Afficher";
-        passwordToggle.setAttribute("aria-pressed", String(shouldShowPassword));
-        passwordInput.focus();
-      });
-    }
   }
 
   return { init, setMessage };

@@ -2,7 +2,7 @@
   min-height: 100vh;
   padding: 28px;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 28px;
   background:
     linear-gradient(90deg, rgba(35, 48, 68, 0.05) 1px, transparent 1px),
@@ -12,10 +12,12 @@
 }
 
 .login-header {
+  width: 100%;
+  margin: 0;
   min-height: 52px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 18px;
 }
 
@@ -48,6 +50,7 @@
   width: min(100%, 430px);
   margin: 0 auto;
   align-self: center;
+  justify-self: center;
   border: 1px solid #c9d3df;
   border-radius: 8px;
   background: #ffffff;
@@ -108,32 +111,6 @@
   box-shadow: 0 0 0 4px rgba(229, 69, 47, 0.12);
 }
 
-.password-field {
-  position: relative;
-}
-
-.password-field input {
-  padding-right: 92px;
-}
-
-.field-action {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  min-width: 78px;
-  height: 36px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: #eef2f6;
-  color: #344054;
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.field-action:focus-visible {
-  outline: 3px solid rgba(229, 69, 47, 0.18);
-}
-
 .login-card .primary-button {
   width: 100%;
   margin-top: 24px;
@@ -163,7 +140,7 @@
   }
 
   .login-layout {
-    align-self: start;
+    align-self: center;
   }
 
   .login-card {

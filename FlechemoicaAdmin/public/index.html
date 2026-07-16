@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Flèche-moi ça | ERP</title>
-    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1450">
-    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1450">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1450">
+    <title>Flèche-moi ça - Accès éditeur</title>
+    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1500">
+    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1504">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1500">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
     <script defer src="/__/firebase/init.js"></script>
-    <script defer src="/assets/js/auth.js?v=20260716-1450"></script>
-    <script defer src="/assets/js/login.js?v=20260716-1450"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-1450"></script>
-    <script defer src="/assets/js/app.js?v=20260716-1450"></script>
+    <script defer src="/assets/js/auth.js?v=20260716-1500"></script>
+    <script defer src="/assets/js/login.js?v=20260716-1500"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-1500"></script>
+    <script defer src="/assets/js/app.js?v=20260716-1502"></script>
   </head>
   <body>
     <main class="shell">
@@ -24,8 +24,8 @@
           <div class="brand-lockup" aria-label="Flèche-moi ça ERP">
             <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
             <div>
-              <h1 id="login-title">Flèche-moi ça</h1>
-              <p class="eyebrow">Accès Editor</p>
+              <h1 id="login-title">FLÈCHE-MOI ÇA</h1>
+              <p class="eyebrow">Accès éditeur</p>
             </div>
           </div>
         </header>
@@ -34,7 +34,6 @@
           <form class="login-card" id="login-form">
             <div class="form-heading">
               <h2>Connexion</h2>
-              <p>Utilise le compte autorisé pour l'administration.</p>
             </div>
 
             <div class="field-group">
@@ -44,10 +43,7 @@
 
             <div class="field-group">
               <label for="password">Mot de passe</label>
-              <div class="password-field">
-                <input id="password" name="password" type="password" autocomplete="current-password" required>
-                <button class="field-action" id="password-toggle" type="button" aria-controls="password" aria-pressed="false">Afficher</button>
-              </div>
+              <input id="password" name="password" type="password" autocomplete="current-password" required>
             </div>
 
             <button class="primary-button" id="login-button" type="submit">Se connecter</button>
@@ -84,7 +80,7 @@
             <div class="metric-row">
               <article class="metric-card">
                 <span class="metric-label">Accès</span>
-                <strong>Editor</strong>
+                <strong>Éditeur</strong>
               </article>
               <article class="metric-card">
                 <span class="metric-label">Projet</span>
