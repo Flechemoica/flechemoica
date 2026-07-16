@@ -76,7 +76,7 @@ struct AccountSetupView: View {
                                         XPTextField(text: $pseudo, prompt: "Pseudo")
                                     }
 
-                                    XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .emailAddress)
+                                    XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .username)
                                     XPSecureField(text: $password, prompt: "Mot de Passe", textContentType: authMode == .signUp ? .newPassword : .password)
 
                                     if authMode == .signUp {
