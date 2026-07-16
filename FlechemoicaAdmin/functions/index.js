@@ -11,6 +11,7 @@ initializeApp();
 const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
 const WEEKLY_GRIDS_TOPIC = "weekly_grids";
 const ALL_USERS_TOPIC = "all_users";
+const MULTICAST_BATCH_SIZE = 500;
 const GRIDS_COLLECTION = "grids";
 const WEEKLY_GRID_TYPE = "WeeklyGrid";
 const NOTIFICATION_LOGS_COLLECTION = "notificationLogs";
@@ -79,6 +80,31 @@ function buildApnsConfig(options = {}) {
   }
 
   return apns;
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function getRegisteredFCMTokens() {
+  const snapshot = await getFirestore().collection("users").get();
+  const tokens = new Set();
+
+  snapshot.docs.forEach((doc) => {
+    const fcmTokens = doc.get("fcmTokens");
+    if (!Array.isArray(fcmTokens)) return;
+
+    fcmTokens.forEach((token) => {
+      const normalized = String(token || "").trim();
+      if (normalized) tokens.add(normalized);
+    });
+  });
+
+  return [...tokens];
 }
 
 async function assertEditor(uid) {
@@ -152,6 +178,36 @@ async function sendTopicNotification({ title, body, topic, data = {}, options = 
   });
 }
 
+async function sendAllUsersNotification({ title, body, data = {}, options = {} }) {
+  const tokens = await getRegisteredFCMTokens();
+  if (!tokens.length) {
+    throw new Error("Aucun token FCM enregistré.");
+  }
+
+  const batches = chunkArray(tokens, MULTICAST_BATCH_SIZE);
+  const results = await Promise.all(
+    batches.map((batch) => getMessaging().sendEachForMulticast({
+      tokens: batch,
+      notification: { title, body },
+      data,
+      apns: buildApnsConfig(options),
+    }))
+  );
+
+  return results.reduce(
+    (summary, result) => ({
+      tokenCount: summary.tokenCount,
+      successCount: summary.successCount + result.successCount,
+      failureCount: summary.failureCount + result.failureCount,
+    }),
+    {
+      tokenCount: tokens.length,
+      successCount: 0,
+      failureCount: 0,
+    }
+  );
+}
+
 async function sendScheduledAdminNotifications() {
   const db = getFirestore();
   const now = Timestamp.now();
@@ -169,10 +225,9 @@ async function sendScheduledAdminNotifications() {
   await Promise.all(dueDocs.map(async (doc) => {
     const data = doc.data();
     try {
-      const messageID = await sendTopicNotification({
+      const delivery = await sendAllUsersNotification({
         title: String(data.title || "Flèche-moi ça"),
         body: String(data.body || ""),
-        topic: String(data.topic || ALL_USERS_TOPIC),
         data: {
           type: "admin_notification",
           notificationID: doc.id,
@@ -182,7 +237,7 @@ async function sendScheduledAdminNotifications() {
 
       await doc.ref.set({
         status: "sent",
-        fcmMessageID: messageID,
+        delivery,
         sentAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -361,10 +416,9 @@ exports.sendAdminNotification = onCall({ region: "europe-west1" }, async (reques
   }
 
   try {
-    const messageID = await sendTopicNotification({
+    const delivery = await sendAllUsersNotification({
       title,
       body,
-      topic: ALL_USERS_TOPIC,
       data: {
         type: "admin_notification",
         notificationID: logRef.id,
@@ -375,11 +429,11 @@ exports.sendAdminNotification = onCall({ region: "europe-west1" }, async (reques
     await logRef.set({
       ...baseLog,
       status: "sent",
-      fcmMessageID: messageID,
+      delivery,
       sentAt: FieldValue.serverTimestamp(),
     });
 
-    return { ok: true, notificationID: logRef.id, status: "sent", messageID };
+    return { ok: true, notificationID: logRef.id, status: "sent", delivery };
   } catch (error) {
     await logRef.set({
       ...baseLog,

@@ -212,7 +212,7 @@ const NotificationsView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.className = "empty-cell";
       cell.textContent = "Aucune notification.";
       row.append(cell);
@@ -231,6 +231,7 @@ const NotificationsView = (() => {
       makeTextCell(data.title || "-"),
       makeTextCell(data.body || "-"),
       makeBadgeCell(data.status || "-"),
+      makeTextCell(formatDelivery(data.delivery)),
       makeTextCell(formatValue(data.scheduledAt)),
       makeTextCell(formatValue(data.sentAt))
     );
@@ -254,6 +255,16 @@ const NotificationsView = (() => {
     badge.textContent = value || "-";
     cell.append(badge);
     return cell;
+  }
+
+  function formatDelivery(delivery) {
+    if (!delivery) return "-";
+
+    const successCount = Number(delivery.successCount || 0);
+    const tokenCount = Number(delivery.tokenCount || 0);
+    const failureCount = Number(delivery.failureCount || 0);
+    const suffix = failureCount > 0 ? `, ${failureCount} échec(s)` : "";
+    return `${successCount}/${tokenCount}${suffix}`;
   }
 
   function formatValue(value) {
