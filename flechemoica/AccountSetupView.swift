@@ -73,11 +73,15 @@ struct AccountSetupView: View {
 
                                 VStack(alignment: .leading, spacing: 14) {
                                     if authMode == .signUp {
-                                        XPTextField(text: $pseudo, prompt: "Pseudo")
+                                        XPTextField(text: $pseudo, prompt: "Pseudo", textContentType: .nickname)
                                     }
 
-                                    XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .username)
-                                    XPSecureField(text: $password, prompt: "Mot de Passe", textContentType: authMode == .signUp ? .newPassword : .password)
+                                    XPTextField(text: $email, prompt: "E-mail", keyboard: .emailAddress, textContentType: .emailAddress)
+                                    XPSecureField(
+                                        text: $password,
+                                        prompt: "Mot de Passe",
+                                        textContentType: .oneTimeCode
+                                    )
 
                                     if authMode == .signUp {
                                         AvatarPickerRow(

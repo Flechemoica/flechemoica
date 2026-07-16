@@ -9,7 +9,6 @@ struct SecurePasswordTextField: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
-        textField.delegate = context.coordinator
         textField.textContentType = textContentType
         textField.isSecureTextEntry = true
         textField.autocorrectionType = .no
@@ -60,33 +59,6 @@ struct SecurePasswordTextField: UIViewRepresentable {
 
         @objc func textDidChange(_ textField: UITextField) {
             text = textField.text ?? ""
-        }
-
-        func textFieldDidChangeSelection(_ textField: UITextField) {
-            text = textField.text ?? ""
-        }
-
-        func textFieldDidEndEditing(_ textField: UITextField) {
-            text = textField.text ?? ""
-        }
-
-        func textField(
-            _ textField: UITextField,
-            shouldChangeCharactersIn range: NSRange,
-            replacementString string: String
-        ) -> Bool {
-            guard let currentText = textField.text,
-                  let textRange = Range(range, in: currentText) else {
-                return true
-            }
-
-            text = currentText.replacingCharacters(in: textRange, with: string)
-            return true
-        }
-
-        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-            textField.resignFirstResponder()
-            return true
         }
     }
 }
