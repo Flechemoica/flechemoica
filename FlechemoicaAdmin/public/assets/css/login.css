@@ -52,6 +52,7 @@
 }
 
 .login-card > .eyebrow {
+  color: var(--ink);
   text-align: center;
 }
 
@@ -85,6 +86,13 @@
 .login-card .primary-button {
   width: 100%;
   margin-top: 24px;
+  background: var(--ink);
+  color: #000000;
+  box-shadow: 0 12px 24px rgba(24, 33, 47, 0.18);
+}
+
+.login-card .primary-button:hover {
+  background: var(--ink);
 }
 
 .form-message {
