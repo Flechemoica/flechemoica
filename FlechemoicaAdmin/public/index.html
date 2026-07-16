@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Flèche-moi ça - Administration</title>
-    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1500">
-    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1845">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-2015">
+    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-2140">
+    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-2140">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-2245">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
@@ -15,9 +15,9 @@
     <script defer src="/__/firebase/init.js"></script>
     <script defer src="/assets/js/auth.js?v=20260716-1900"></script>
     <script defer src="/assets/js/login.js?v=20260716-1900"></script>
-    <script defer src="/assets/js/users.js?v=20260716-1925"></script>
-    <script defer src="/assets/js/grids.js?v=20260716-1940"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-1950"></script>
+    <script defer src="/assets/js/users.js?v=20260716-2040"></script>
+    <script defer src="/assets/js/grids.js?v=20260716-2245"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-2120"></script>
     <script defer src="/assets/js/app.js?v=20260716-1900"></script>
   </head>
   <body>
@@ -76,7 +76,7 @@
           <nav class="sidebar" aria-label="Navigation principale">
             <button class="nav-item is-active" type="button" data-panel-target="overview-panel">Vue générale</button>
             <button class="nav-item" type="button" data-panel-target="users-panel">Utilisateurs</button>
-            <button class="nav-item" type="button" data-panel-target="grids-panel">Grilles</button>
+            <button class="nav-item" type="button" data-panel-target="grids-panel">Grilles hebdomadaires</button>
             <button class="nav-item" type="button" data-panel-target="accounting-panel">Comptabilité</button>
           </nav>
 
@@ -85,7 +85,11 @@
 
             <div class="workspace-panel is-hidden" id="users-panel" data-view-src="/users.html"></div>
 
+            <div class="workspace-panel is-hidden" id="user-detail-panel" data-view-src="/user-detail.html"></div>
+
             <div class="workspace-panel is-hidden" id="grids-panel" data-view-src="/grids.html"></div>
+
+            <div class="workspace-panel is-hidden" id="grid-detail-panel" data-view-src="/grid-detail.html"></div>
 
             <div class="workspace-panel is-hidden" id="accounting-panel">
               <div class="workspace-header">

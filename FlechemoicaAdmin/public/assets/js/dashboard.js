@@ -27,12 +27,16 @@ const DashboardView = (() => {
 
     if (panelID === "users-panel") {
       UsersView.start();
+    } else if (panelID === "user-detail-panel") {
+      UsersView.startDetail(getUserIDFromPath());
     } else {
       UsersView.stop();
     }
 
     if (panelID === "grids-panel") {
       GridsView.start();
+    } else if (panelID === "grid-detail-panel") {
+      GridsView.startDetail(getGridIDFromPath());
     } else {
       GridsView.stop();
     }
@@ -55,6 +59,14 @@ const DashboardView = (() => {
     loginView.classList.add("is-hidden");
     dashboardView.classList.remove("is-hidden");
     showPanel(getPanelFromPath(), { push: false });
+  }
+
+  function showUserDetail(userID) {
+    showPanel("user-detail-panel", { push: false });
+  }
+
+  function showGridDetail(gridID) {
+    showPanel("grid-detail-panel", { push: false });
   }
 
   function init() {
@@ -83,6 +95,14 @@ const DashboardView = (() => {
   }
 
   function getPanelFromPath() {
+    if (/^\/user\/[^/]+\.html$/.test(window.location.pathname)) {
+      return "user-detail-panel";
+    }
+
+    if (/^\/grille\/[^/]+\.html$/.test(window.location.pathname)) {
+      return "grid-detail-panel";
+    }
+
     return routePanels[window.location.pathname] || "overview-panel";
   }
 
@@ -92,9 +112,21 @@ const DashboardView = (() => {
     window.history.pushState({ panelID }, "", path);
   }
 
+  function getUserIDFromPath() {
+    const match = window.location.pathname.match(/^\/user\/([^/]+)\.html$/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function getGridIDFromPath() {
+    const match = window.location.pathname.match(/^\/grille\/([^/]+)\.html$/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
   return {
     init,
     showDashboard,
+    showGridDetail,
+    showUserDetail,
     showLogin,
   };
 })();

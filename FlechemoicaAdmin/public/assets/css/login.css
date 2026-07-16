@@ -109,7 +109,7 @@
 
 .field-group input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(229, 69, 47, 0.12);
+  box-shadow: 0 0 0 4px rgba(192, 174, 238, 0.22);
 }
 
 .login-card .primary-button {

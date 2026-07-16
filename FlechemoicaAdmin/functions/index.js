@@ -1,7 +1,8 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { FieldValue, getFirestore } = require("firebase-admin/firestore");
+const { FieldValue, Timestamp, getFirestore } = require("firebase-admin/firestore");
 
 initializeApp();
 
@@ -127,3 +128,34 @@ exports.adminUsersMeta = onCall({ region: "europe-west1" }, async (request) => {
     })),
   };
 });
+
+exports.publishScheduledGrids = onSchedule(
+  {
+    region: "europe-west1",
+    schedule: "0 * * * *",
+    timeZone: "Europe/Paris",
+  },
+  async () => {
+    const db = getFirestore();
+    const now = Timestamp.now();
+    const snapshot = await db
+      .collection("grids")
+      .where("status", "==", "scheduled")
+      .where("releaseAt", "<=", now)
+      .limit(50)
+      .get();
+
+    if (snapshot.empty) return;
+
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        status: "published",
+        publishedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+  }
+);

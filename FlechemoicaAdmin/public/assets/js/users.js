@@ -5,6 +5,14 @@ const UsersView = (() => {
   let tableBody = null;
   let statusNode = null;
   let searchInput = null;
+  let detailTitle = null;
+  let detailMeta = null;
+  let detailStatus = null;
+  let accountDetails = null;
+  let detailActions = null;
+  let playedGridsBody = null;
+  let completedGridsBody = null;
+  let unlockedGridsBody = null;
   let users = [];
   let authMetadata = new Map();
   let viewLoaded = false;
@@ -24,6 +32,14 @@ const UsersView = (() => {
     tableBody = document.getElementById("users-table-body");
     statusNode = document.getElementById("users-status");
     searchInput = document.getElementById("users-search");
+    detailTitle = document.getElementById("user-detail-title");
+    detailMeta = document.getElementById("user-detail-meta");
+    detailStatus = document.getElementById("user-detail-status");
+    accountDetails = document.getElementById("user-account-details");
+    detailActions = document.getElementById("user-detail-actions");
+    playedGridsBody = document.getElementById("user-played-grids");
+    completedGridsBody = document.getElementById("user-completed-grids");
+    unlockedGridsBody = document.getElementById("user-unlocked-grids");
 
     if (searchInput && !searchInput.dataset.bound) {
       searchInput.addEventListener("input", () => renderUsers(filterUsers()));
@@ -63,6 +79,13 @@ const UsersView = (() => {
     if (!statusNode) return;
     statusNode.textContent = message;
     statusNode.dataset.tone = tone;
+    setDetailStatus(message, tone);
+  }
+
+  function setDetailStatus(message, tone = "") {
+    if (!detailStatus) return;
+    detailStatus.textContent = message;
+    detailStatus.dataset.tone = tone;
   }
 
   async function start() {
@@ -104,6 +127,16 @@ const UsersView = (() => {
     if (!unsubscribe) return;
     unsubscribe();
     unsubscribe = null;
+  }
+
+  async function startDetail(userID) {
+    try {
+      await ensureDetailView();
+      await renderUserDetail(userID);
+    } catch (error) {
+      resolveNodes();
+      setDetailStatus(error.message || "Impossible de charger la fiche utilisateur.", "error");
+    }
   }
 
   function renderUsers(docs) {
@@ -152,6 +185,12 @@ const UsersView = (() => {
 
   function createUserRow(id, data) {
     const row = document.createElement("tr");
+    const currentUser = firebase.auth().currentUser;
+    const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
+
+    if (isCurrentUser) {
+      row.className = "current-user-row";
+    }
 
     row.append(
       makeIdentityCell(id, data),
@@ -167,14 +206,242 @@ const UsersView = (() => {
 
   function makeIdentityCell(id, data) {
     const cell = document.createElement("td");
-    const name = document.createElement("strong");
+    const name = document.createElement("a");
     const meta = document.createElement("span");
 
+    name.className = "table-link";
+    name.href = `/user/${encodeURIComponent(id)}.html`;
     name.textContent = data.pseudo || data.displayName || data.email || "Utilisateur";
+    name.addEventListener("click", (event) => {
+      event.preventDefault();
+      window.history.pushState({ panelID: "user-detail-panel", userID: id }, "", name.href);
+      DashboardView.showUserDetail(id);
+    });
     meta.textContent = data.uid || id;
 
     cell.append(name, meta);
     return cell;
+  }
+
+  async function ensureDetailView() {
+    const panel = document.getElementById("user-detail-panel");
+    if (!panel) throw new Error("Panneau fiche utilisateur introuvable.");
+
+    const viewSrc = panel.dataset.viewSrc;
+    if (viewSrc && !panel.innerHTML.trim()) {
+      const response = await fetch(viewSrc, { cache: "no-store" });
+      if (!response.ok) throw new Error("Vue fiche utilisateur introuvable.");
+      panel.innerHTML = await response.text();
+    }
+
+    resolveNodes();
+  }
+
+  async function renderUserDetail(userID) {
+    const services = AuthGate.ensureFirebase();
+    firestore = firestore || services.firestore;
+    functions = functions || (firebase.functions ? firebase.app().functions("europe-west1") : null);
+
+    let doc = users.find((entry) => entry.id === userID || entry.data().uid === userID);
+
+    if (!doc && firestore && userID) {
+      const snapshot = await firestore.collection("users").doc(userID).get();
+      if (snapshot.exists) doc = snapshot;
+    }
+
+    const data = doc ? doc.data() : null;
+    if (!data) throw new Error("Utilisateur introuvable.");
+
+    const title = data?.pseudo || data?.displayName || data?.email || "Utilisateur";
+    const id = doc.id;
+
+    if (detailTitle) detailTitle.textContent = title;
+    if (detailMeta) detailMeta.textContent = `ID : ${data.uid || id}`;
+    setDetailStatus("");
+
+    await renderAccountDetails(id, data);
+    renderDetailActions(id, data);
+    await renderGridActivity(data);
+  }
+
+  async function renderAccountDetails(id, data) {
+    if (!accountDetails) return;
+
+    const metadata = authMetadata.get(data.uid || id) || await loadSingleAuthMetadata(data.uid || id);
+    const details = [
+      ["Nom d'utilisateur", data.pseudo || data.displayName || "-"],
+      ["E-mail", data.email || data.emailKey || "-"],
+      ["Connexion", formatProviders(metadata?.providers || getFallbackProviders(data))],
+      ["Rôle", data.status || data.role || "Utilisateur"],
+      ["Création", formatValue(data.createdAt)],
+      ["Mise à jour", formatValue(data.updatedAt)],
+      ["Statut du compte", data.accountStatus === "disabled" ? "Désactivé" : "Actif"],
+    ];
+
+    accountDetails.replaceChildren(...details.flatMap(([label, value]) => {
+      const term = document.createElement("dt");
+      const description = document.createElement("dd");
+      term.textContent = label;
+      description.textContent = value;
+      return [term, description];
+    }));
+  }
+
+  async function loadSingleAuthMetadata(uid) {
+    if (!functions || !uid) return null;
+
+    try {
+      const response = await functions.httpsCallable("adminUsersMeta")({ uids: [uid] });
+      const user = response.data?.users?.[0] || null;
+      if (user) authMetadata.set(uid, user);
+      return user;
+    } catch {
+      return null;
+    }
+  }
+
+  function renderDetailActions(id, data) {
+    if (!detailActions) return;
+
+    const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
+    const isDisabled = data.accountStatus === "disabled";
+    const currentUser = firebase.auth().currentUser;
+    const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
+
+    detailActions.replaceChildren(
+      makeDetailActionButton("Réinitialiser le mot de passe", () => resetPassword(id, data))
+    );
+
+    if (!isCurrentUser) {
+      detailActions.append(
+        makeDetailActionButton(
+          isDisabled ? "Réactiver le compte" : "Désactiver le compte",
+          () => setAccountDisabled(id, data, !isDisabled)
+        ),
+        makeDetailActionButton("Supprimer le compte", () => deleteAccount(id, data), "danger")
+      );
+    }
+
+    if (!(isCurrentUser && isEditor)) {
+      detailActions.append(
+        makeDetailActionButton(isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur", () => {
+          if (isEditor) {
+            removeEditorStatus(id, data);
+          } else {
+            promoteToEditor(id, data);
+          }
+        })
+      );
+    }
+  }
+
+  function makeDetailActionButton(label, action, tone = "") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = tone === "danger" ? "ghost-button detail-danger-button" : "ghost-button";
+    button.textContent = label;
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  async function renderGridActivity(data) {
+    const gridNames = await loadGridNames([
+      ...Object.keys(getObject(data.gridTimers)),
+      ...Object.values(getObject(data.completedGrids)).map((entry) => entry?.gridId),
+      ...getArray(data.unlockedGridIDs),
+    ]);
+
+    renderPlayedGrids(data.gridTimers, gridNames);
+    renderCompletedGrids(data.completedGrids, gridNames);
+    renderUnlockedGrids(data.unlockedGridIDs, gridNames);
+  }
+
+  function renderPlayedGrids(gridTimers, gridNames) {
+    const timers = Object.entries(getObject(gridTimers))
+      .sort(([leftID], [rightID]) => getGridName(leftID, gridNames).localeCompare(getGridName(rightID, gridNames)));
+
+    renderRows(playedGridsBody, timers, 2, ([gridID, seconds]) => [
+      getGridName(gridID, gridNames),
+      formatDuration(seconds),
+    ]);
+  }
+
+  function renderCompletedGrids(completedGrids, gridNames) {
+    const entries = Object.values(getObject(completedGrids))
+      .filter((entry) => entry && typeof entry === "object")
+      .sort((left, right) => getTimestampMillis(right.completedAt) - getTimestampMillis(left.completedAt));
+
+    renderRows(completedGridsBody, entries, 3, (entry) => [
+      entry.title || getGridName(entry.gridId, gridNames),
+      formatValue(entry.completedAt),
+      formatDuration(entry.elapsedSeconds),
+    ]);
+  }
+
+  function renderUnlockedGrids(unlockedGridIDs, gridNames) {
+    const ids = getArray(unlockedGridIDs);
+    renderRows(unlockedGridsBody, ids, 2, (gridID) => [
+      getGridName(gridID, gridNames),
+      gridID,
+    ]);
+  }
+
+  function renderRows(body, items, colSpan, mapCells) {
+    if (!body) return;
+    body.replaceChildren();
+
+    if (!items.length) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = colSpan;
+      cell.className = "empty-cell";
+      cell.textContent = "Aucune donnée.";
+      row.append(cell);
+      body.append(row);
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    items.forEach((item) => {
+      const row = document.createElement("tr");
+      mapCells(item).forEach((value) => {
+        const cell = document.createElement("td");
+        cell.textContent = value == null || value === "" ? "-" : String(value);
+        row.append(cell);
+      });
+      fragment.append(row);
+    });
+    body.append(fragment);
+  }
+
+  async function loadGridNames(ids) {
+    const uniqueIDs = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+    const names = new Map();
+
+    await Promise.all(uniqueIDs.map(async (gridID) => {
+      try {
+        const snapshot = await firestore.collection("grids").doc(gridID).get();
+        if (!snapshot.exists) return;
+        const data = snapshot.data();
+        names.set(gridID, data.title || data.name || gridID);
+      } catch {
+        return;
+      }
+    }));
+
+    return names;
+  }
+
+  function getGridName(gridID, gridNames) {
+    return gridNames.get(String(gridID || "")) || String(gridID || "-");
+  }
+
+  function getObject(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+
+  function getArray(value) {
+    return Array.isArray(value) ? value : [];
   }
 
   function makeTextCell(value) {
@@ -210,8 +477,14 @@ const UsersView = (() => {
   function makeStatusCell(value) {
     const cell = document.createElement("td");
     const badge = document.createElement("span");
+    const normalized = String(value || "").toLowerCase();
     cell.className = "role-cell";
     badge.className = "status-badge";
+    if (normalized === "editor") {
+      badge.classList.add("status-badge-editor");
+    } else if (normalized === "utilisateur") {
+      badge.classList.add("status-badge-user");
+    }
     badge.textContent = value;
     cell.append(badge);
     return cell;
@@ -501,9 +774,28 @@ const UsersView = (() => {
     return String(value);
   }
 
+  function formatDuration(value) {
+    const seconds = Number(value || 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return "-";
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    if (minutes <= 0) return `${remainingSeconds}s`;
+    return `${minutes} min ${String(remainingSeconds).padStart(2, "0")}s`;
+  }
+
+  function getTimestampMillis(value) {
+    if (!value) return 0;
+    if (typeof value.toMillis === "function") return value.toMillis();
+    if (typeof value.toDate === "function") return value.toDate().getTime();
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
   return {
     init,
     start,
+    startDetail,
     stop,
   };
 })();
