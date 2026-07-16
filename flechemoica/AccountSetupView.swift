@@ -400,6 +400,10 @@ struct AccountSetupView: View {
             accessToken: googleUser.accessToken.tokenString
         )
 
+        if let currentUser = Auth.auth().currentUser {
+            return try await currentUser.link(with: credential)
+        }
+
         return try await Auth.auth().signIn(with: credential)
     }
 
@@ -458,7 +462,12 @@ struct AccountSetupView: View {
                 rawNonce: nonce,
                 fullName: appleIDCredential.fullName
             )
-            let result = try await Auth.auth().signIn(with: credential)
+            let result: AuthDataResult
+            if let currentUser = Auth.auth().currentUser {
+                result = try await currentUser.link(with: credential)
+            } else {
+                result = try await Auth.auth().signIn(with: credential)
+            }
             let avatarID = try await saveAppleUserProfile(for: result.user, appleCredential: appleIDCredential)
             try await updateAppleAuthProfileIfNeeded(
                 for: result.user,
@@ -568,6 +577,12 @@ struct AccountSetupView: View {
         switch code {
         case .emailAlreadyInUse:
             return "Cet e-mail a déjà un compte."
+        case .accountExistsWithDifferentCredential:
+            return "Un compte existe déjà avec cet e-mail. Connecte-toi avec sa méthode initiale, puis lie Apple ou Google depuis le compte."
+        case .credentialAlreadyInUse:
+            return "Cette connexion est déjà liée à un autre compte."
+        case .providerAlreadyLinked:
+            return "Cette méthode de connexion est déjà liée au compte."
         case .invalidEmail:
             return "E-mail invalide."
         case .wrongPassword, .invalidCredential:

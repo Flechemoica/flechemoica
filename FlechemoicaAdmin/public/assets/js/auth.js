@@ -40,7 +40,7 @@ const AuthGate = (() => {
 
     if (!isEditorProfile(profile)) {
       await auth.signOut();
-      throw new Error("Ce compte n'a pas le statut Editor.");
+      throw new Error("Accès non autorisé.");
     }
 
     return profile;
