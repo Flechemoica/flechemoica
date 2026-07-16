@@ -10,9 +10,8 @@ struct SecurePasswordTextField: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField(frame: .zero)
         textField.delegate = context.coordinator
-        textField.isSecureTextEntry = true
         textField.textContentType = textContentType
-        textField.passwordRules = passwordRules
+        textField.isSecureTextEntry = true
         textField.autocorrectionType = .no
         textField.autocapitalizationType = .none
         textField.spellCheckingType = .no
@@ -38,17 +37,11 @@ struct SecurePasswordTextField: UIViewRepresentable {
         }
 
         uiView.textContentType = textContentType
-        uiView.passwordRules = passwordRules
         uiView.attributedPlaceholder = placeholderText
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
-    }
-
-    private var passwordRules: UITextInputPasswordRules? {
-        guard textContentType == .newPassword else { return nil }
-        return UITextInputPasswordRules(descriptor: "minlength: 12; maxlength: 64;")
     }
 
     private var placeholderText: NSAttributedString {
