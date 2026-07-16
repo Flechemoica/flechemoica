@@ -1,9 +1,8 @@
-const EDITOR_STATUSES = new Set(["editor", "editors"]);
+const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
 
 const AuthGate = (() => {
   let auth;
   let firestore;
-  let database;
 
   function ensureFirebase() {
     if (!window.firebase || !firebase.apps.length) {
@@ -12,12 +11,7 @@ const AuthGate = (() => {
 
     auth = auth || firebase.auth();
     firestore = firestore || (firebase.firestore ? firebase.firestore() : null);
-    database = database || (firebase.database ? firebase.database() : null);
-    return { auth, firestore, database };
-  }
-
-  function normalizeEmail(email) {
-    return String(email || "").trim().toLowerCase();
+    return { auth, firestore };
   }
 
   function isEditorProfile(profile) {
@@ -25,7 +19,7 @@ const AuthGate = (() => {
     return EDITOR_STATUSES.has(status);
   }
 
-  async function getFirestoreUser(uid, email) {
+  async function getFirestoreUser(uid) {
     if (!firestore) return null;
 
     const byUid = await firestore.collection("users").doc(uid).get();
@@ -33,67 +27,12 @@ const AuthGate = (() => {
       return { id: byUid.id, source: "firestore", ...byUid.data() };
     }
 
-    const normalizedEmail = normalizeEmail(email);
-    const emailCandidates = [...new Set([email, normalizedEmail].filter(Boolean))];
-    if (!emailCandidates.length) return null;
-
-    for (const emailCandidate of emailCandidates) {
-      const byEmail = await firestore
-        .collection("users")
-        .where("email", "==", emailCandidate)
-        .limit(1)
-        .get();
-
-      if (!byEmail.empty) {
-        const doc = byEmail.docs[0];
-        return { id: doc.id, source: "firestore", ...doc.data() };
-      }
-    }
-
-    return null;
-  }
-
-  async function getRealtimeUser(uid, email) {
-    if (!database) return null;
-
-    const byUid = await database.ref(`users/${uid}`).get();
-    if (byUid.exists()) {
-      return { id: uid, source: "database", ...byUid.val() };
-    }
-
-    const normalizedEmail = normalizeEmail(email);
-    const emailCandidates = [...new Set([email, normalizedEmail].filter(Boolean))];
-    if (!emailCandidates.length) return null;
-
-    for (const emailCandidate of emailCandidates) {
-      const byEmail = await database
-        .ref("users")
-        .orderByChild("email")
-        .equalTo(emailCandidate)
-        .limitToFirst(1)
-        .get();
-
-      if (!byEmail.exists()) continue;
-
-      let foundUser = null;
-      byEmail.forEach((child) => {
-        foundUser = { id: child.key, source: "database", ...child.val() };
-        return true;
-      });
-
-      return foundUser;
-    }
-
     return null;
   }
 
   async function getEditorProfile(user) {
     ensureFirebase();
-
-    const firestoreUser = await getFirestoreUser(user.uid, user.email);
-    if (firestoreUser) return firestoreUser;
-
-    return getRealtimeUser(user.uid, user.email);
+    return getFirestoreUser(user.uid);
   }
 
   async function requireEditor(user) {
