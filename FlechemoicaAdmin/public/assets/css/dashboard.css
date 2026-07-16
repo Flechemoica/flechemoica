@@ -29,6 +29,20 @@
   min-width: 0;
 }
 
+.brand-home-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brand-home-button:focus-visible {
+  outline: 3px solid rgba(238, 61, 47, 0.28);
+  outline-offset: 6px;
+}
+
 .account-box {
   display: flex;
   align-items: center;
@@ -235,6 +249,31 @@
   text-align: center;
 }
 
+.users-table .actions-column,
+.users-table .actions-cell {
+  width: 64px;
+  text-align: right;
+}
+
+.email-value {
+  display: block;
+}
+
+.email-pending {
+  display: inline-flex !important;
+  width: fit-content;
+  min-height: 24px;
+  align-items: center;
+  margin-top: 6px !important;
+  padding: 0 8px;
+  border: 1px solid #f1c6be;
+  border-radius: 6px;
+  background: #fff4f1;
+  color: var(--danger) !important;
+  font-size: 0.74rem !important;
+  font-weight: 800;
+}
+
 .status-badge {
   display: inline-flex;
   width: fit-content;
@@ -253,6 +292,29 @@
 
 .role-cell .status-badge {
   margin: 0 auto;
+}
+
+.options-button {
+  width: 34px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.options-button:hover {
+  border-color: #c7d2df;
+  background: #f7f9fc;
+}
+
+.options-button:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .user-details {

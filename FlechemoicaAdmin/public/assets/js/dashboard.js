@@ -3,6 +3,7 @@ const DashboardView = (() => {
   const dashboardView = document.getElementById("dashboard-view");
   const accountEmail = document.getElementById("account-email");
   const logoutButton = document.getElementById("logout-button");
+  const homeButton = document.getElementById("dashboard-home-button");
   const navItems = Array.from(document.querySelectorAll("[data-panel-target]"));
   const workspacePanels = Array.from(document.querySelectorAll(".workspace-panel"));
 
@@ -47,6 +48,10 @@ const DashboardView = (() => {
 
     logoutButton.addEventListener("click", () => {
       AuthGate.signOut();
+    });
+
+    homeButton.addEventListener("click", () => {
+      showPanel("overview-panel");
     });
   }
 

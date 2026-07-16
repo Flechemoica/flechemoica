@@ -6,7 +6,7 @@
     <title>Flèche-moi ça - Administration</title>
     <link rel="stylesheet" href="/assets/css/global.css?v=20260716-1500">
     <link rel="stylesheet" href="/assets/css/login.css?v=20260716-1548">
-    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1745">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-1755">
     <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
@@ -14,8 +14,8 @@
     <script defer src="/__/firebase/init.js"></script>
     <script defer src="/assets/js/auth.js?v=20260716-1500"></script>
     <script defer src="/assets/js/login.js?v=20260716-1655"></script>
-    <script defer src="/assets/js/users.js?v=20260716-1745"></script>
-    <script defer src="/assets/js/dashboard.js?v=20260716-1720"></script>
+    <script defer src="/assets/js/users.js?v=20260716-1755"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-1755"></script>
     <script defer src="/assets/js/app.js?v=20260716-1502"></script>
   </head>
   <body>
@@ -56,13 +56,13 @@
       <section class="dashboard-view is-hidden" id="dashboard-view" aria-labelledby="dashboard-title">
         <header class="topbar">
           <div class="topbar-brand">
-            <div class="brand-lockup" aria-label="Flèche-moi ça Administration">
+            <button class="brand-lockup brand-home-button" id="dashboard-home-button" type="button" aria-label="Aller à la vue générale">
               <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
               <div>
                 <h1 id="dashboard-title">FLÈCHE-MOI ÇA</h1>
                 <p class="eyebrow">Administration</p>
               </div>
-            </div>
+            </button>
           </div>
           <div class="account-box">
             <span id="account-email"></span>

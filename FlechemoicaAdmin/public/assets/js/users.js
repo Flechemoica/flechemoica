@@ -104,7 +104,7 @@ const UsersView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 4;
+      cell.colSpan = 5;
       cell.className = "empty-cell";
       cell.textContent = "Aucun utilisateur.";
       row.append(cell);
@@ -145,9 +145,10 @@ const UsersView = (() => {
 
     row.append(
       makeIdentityCell(id, data),
-      makeTextCell(data.email || data.emailKey || "-"),
+      makeEmailCell(data),
       makeStatusCell(data.status || data.role || "Utilisateur"),
-      makeTextCell(formatValue(data.createdAt))
+      makeTextCell(formatValue(data.createdAt)),
+      makeActionsCell(id, data)
     );
 
     return row;
@@ -171,6 +172,23 @@ const UsersView = (() => {
     return cell;
   }
 
+  function makeEmailCell(data) {
+    const cell = document.createElement("td");
+    const email = document.createElement("span");
+    email.className = "email-value";
+    email.textContent = data.email || data.emailKey || "-";
+    cell.append(email);
+
+    if (data.emailVerificationStatus === "pending") {
+      const verification = document.createElement("span");
+      verification.className = "email-pending";
+      verification.textContent = "E-mail à confirmer";
+      cell.append(verification);
+    }
+
+    return cell;
+  }
+
   function makeStatusCell(value) {
     const cell = document.createElement("td");
     const badge = document.createElement("span");
@@ -179,6 +197,42 @@ const UsersView = (() => {
     badge.textContent = value;
     cell.append(badge);
     return cell;
+  }
+
+  function makeActionsCell(id, data) {
+    const cell = document.createElement("td");
+    const button = document.createElement("button");
+    const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
+
+    cell.className = "actions-cell";
+    button.className = "options-button";
+    button.type = "button";
+    button.textContent = "...";
+    button.setAttribute("aria-label", `Options pour ${data.pseudo || data.email || "cet utilisateur"}`);
+    button.disabled = isEditor && data.emailVerificationStatus === "pending";
+    button.addEventListener("click", () => promoteToEditor(id, data));
+
+    cell.append(button);
+    return cell;
+  }
+
+  async function promoteToEditor(id, data) {
+    const label = data.pseudo || data.email || "cet utilisateur";
+    const shouldPromote = window.confirm(`Passer ${label} en Editor et marquer son e-mail à confirmer ?`);
+    if (!shouldPromote) return;
+
+    try {
+      setStatus("Mise à jour...");
+      await firestore.collection("users").doc(id).update({
+        status: "Editor",
+        emailVerificationStatus: "pending",
+        emailVerificationRequestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      setStatus("Utilisateur passé en Editor. E-mail à confirmer.");
+    } catch (error) {
+      setStatus(error.message || "Impossible de mettre à jour l'utilisateur.", "error");
+    }
   }
 
   function formatValue(value) {
