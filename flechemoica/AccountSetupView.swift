@@ -870,11 +870,11 @@ private struct XPSecureField: View {
     var textContentType: UITextContentType? = .password
 
     var body: some View {
-        SecureField(text: $text) {
-            Text(prompt)
-                .foregroundStyle(.gray)
-        }
-        .textContentType(textContentType)
+        SecurePasswordTextField(
+            text: $text,
+            placeholder: prompt,
+            textContentType: textContentType
+        )
         .xpInputStyle()
     }
 }
