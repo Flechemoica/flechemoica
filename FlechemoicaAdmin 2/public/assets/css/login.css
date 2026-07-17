@@ -1,0 +1,170 @@
+.login-view {
+  min-height: 100vh;
+  padding: 28px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 28px;
+  background:
+    linear-gradient(90deg, rgba(35, 48, 68, 0.05) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(35, 48, 68, 0.05) 1px, transparent 1px),
+    #eef2f6;
+  background-size: 32px 32px;
+}
+
+.login-header {
+  width: 100%;
+  margin: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  width: 54px;
+  height: 54px;
+  display: block;
+  object-fit: contain;
+}
+
+.brand-lockup .eyebrow {
+  margin: 4px 0 0;
+  color: var(--accent);
+}
+
+.brand-lockup h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.42rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.login-layout {
+  width: min(100%, 430px);
+  margin: 0 auto;
+  align-self: center;
+  justify-self: center;
+  border: 1px solid #c9d3df;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(24, 33, 47, 0.12);
+  overflow: hidden;
+}
+
+.login-card {
+  padding: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--panel);
+}
+
+.form-heading {
+  margin-bottom: 24px;
+}
+
+.form-heading h2 {
+  margin: 0 0 8px;
+  font-size: 1.55rem;
+  letter-spacing: 0;
+}
+
+.form-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.field-group {
+  margin-top: 16px;
+}
+
+.field-group label {
+  display: block;
+  margin: 0 0 8px;
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.field-group input {
+  width: 100%;
+  height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: #ffffff;
+  outline: 0;
+}
+
+.field-group input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(192, 174, 238, 0.22);
+}
+
+.login-card .primary-button {
+  width: 100%;
+  margin-top: 24px;
+  background: var(--accent);
+  color: #000000;
+}
+
+.login-card .ghost-button {
+  width: 100%;
+  margin-top: 10px;
+}
+
+#mfa-code-group {
+  margin-top: 16px;
+}
+
+#mfa-recaptcha-container {
+  min-height: 0;
+}
+
+.login-card .primary-button:hover {
+  background: var(--accent-dark);
+  color: #000000;
+}
+
+.form-message {
+  min-height: 42px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.form-message[data-tone="error"] {
+  color: var(--danger);
+}
+
+@media (max-width: 860px) {
+  .login-view {
+    padding: 18px;
+    gap: 18px;
+  }
+
+  .login-header {
+    justify-content: flex-start;
+  }
+
+  .login-layout {
+    align-self: center;
+  }
+
+  .login-card {
+    padding: 24px;
+  }
+}

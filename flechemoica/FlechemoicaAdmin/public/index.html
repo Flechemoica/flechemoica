@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Flèche-moi ça - Administration</title>
+    <link rel="stylesheet" href="/assets/css/global.css?v=20260716-2140">
+    <link rel="stylesheet" href="/assets/css/login.css?v=20260716-2140">
+    <link rel="stylesheet" href="/assets/css/dashboard.css?v=20260716-2355">
+    <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
+    <script defer src="/__/firebase/12.16.0/firebase-functions-compat.js"></script>
+    <script defer src="/__/firebase/init.js"></script>
+    <script defer src="/assets/js/auth.js?v=20260716-1900"></script>
+    <script defer src="/assets/js/login.js?v=20260716-1900"></script>
+    <script defer src="/assets/js/users.js?v=20260716-2340"></script>
+    <script defer src="/assets/js/grids.js?v=20260716-2340"></script>
+    <script defer src="/assets/js/notifications.js?v=20260717-0005"></script>
+    <script defer src="/assets/js/dashboard.js?v=20260716-2305"></script>
+    <script defer src="/assets/js/app.js?v=20260716-1900"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="login-view" id="login-view" aria-labelledby="login-title">
+        <header class="login-header">
+          <div class="brand-lockup" aria-label="Flèche-moi ça ERP">
+            <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
+            <div>
+              <h1 id="login-title">FLÈCHE-MOI ÇA</h1>
+              <p class="eyebrow">Administration</p>
+            </div>
+          </div>
+        </header>
+
+        <div class="login-layout">
+          <form class="login-card" id="login-form">
+            <div class="form-heading">
+              <h2>Connexion</h2>
+            </div>
+
+            <div class="field-group">
+              <label for="email">Adresse e-mail</label>
+              <input id="email" name="email" type="email" autocomplete="email" inputmode="email" required>
+            </div>
+
+            <div class="field-group">
+              <label for="password">Mot de passe</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+
+            <button class="primary-button" id="login-button" type="submit">Se connecter</button>
+            <p class="form-message" id="login-message" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+      </section>
+
+      <section class="dashboard-view is-hidden" id="dashboard-view" aria-labelledby="dashboard-title">
+        <header class="topbar">
+          <div class="topbar-brand">
+            <button class="brand-lockup brand-home-button" id="dashboard-home-button" type="button" aria-label="Aller à la vue générale">
+              <img class="brand-mark" src="/assets/img/flechemoica-logo.png" alt="">
+              <div>
+                <h1 id="dashboard-title">FLÈCHE-MOI ÇA</h1>
+                <p class="eyebrow">Administration</p>
+              </div>
+            </button>
+          </div>
+          <div class="account-box">
+            <span id="account-email"></span>
+            <button class="ghost-button" id="logout-button" type="button">Déconnexion</button>
+          </div>
+        </header>
+
+        <div class="dashboard-grid">
+          <nav class="sidebar" aria-label="Navigation principale">
+            <button class="nav-item is-active" type="button" data-panel-target="overview-panel">Vue générale</button>
+            <button class="nav-item" type="button" data-panel-target="users-panel">Utilisateurs</button>
+            <button class="nav-item" type="button" data-panel-target="grids-panel">Grilles hebdomadaires</button>
+            <button class="nav-item" type="button" data-panel-target="notifications-panel">Notifications</button>
+            <button class="nav-item" type="button" data-panel-target="accounting-panel">Comptabilité</button>
+          </nav>
+
+          <section class="workspace">
+            <div class="workspace-panel" id="overview-panel"></div>
+
+            <div class="workspace-panel is-hidden" id="users-panel" data-view-src="/users.html"></div>
+
+            <div class="workspace-panel is-hidden" id="user-detail-panel" data-view-src="/user-detail.html"></div>
+
+            <div class="workspace-panel is-hidden" id="grids-panel" data-view-src="/grids.html"></div>
+
+            <div class="workspace-panel is-hidden" id="grid-detail-panel" data-view-src="/grid-detail.html"></div>
+
+            <div class="workspace-panel is-hidden" id="notifications-panel" data-view-src="/partials/notifications.html"></div>
+
+            <div class="workspace-panel is-hidden" id="accounting-panel">
+              <div class="workspace-header">
+                <h2>Comptabilité</h2>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

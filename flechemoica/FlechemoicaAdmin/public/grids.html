@@ -1,0 +1,55 @@
+<div class="workspace-header workspace-header-row">
+  <div>
+    <h2>Grilles hebdomadaires</h2>
+  </div>
+  <div class="users-toolbar grids-toolbar">
+    <button class="primary-button compact-button" id="add-grid-button" type="button">+</button>
+    <label class="sr-only" for="grids-search">Rechercher une grille</label>
+    <input id="grids-search" type="search" placeholder="Rechercher" autocomplete="off">
+    <p class="panel-status" id="grids-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+<form class="import-panel is-hidden" id="grid-import-form">
+  <div class="field-row">
+    <div class="field-group">
+      <label for="grid-import-title">Titre</label>
+      <input id="grid-import-title" type="text" placeholder="Grille 3" required>
+    </div>
+    <div class="field-group">
+      <label for="grid-import-release">Publication</label>
+      <input id="grid-import-release" type="datetime-local" required>
+    </div>
+  </div>
+  <div class="json-drop-zone" id="grid-json-drop-zone" role="button" tabindex="0" aria-controls="grid-import-json">
+    <strong>Glisser le fichier JSON ici</strong>
+    <span>ou cliquer pour le choisir</span>
+    <input id="grid-json-file" type="file" accept="application/json,.json">
+  </div>
+  <input id="grid-import-json" type="hidden" required>
+  <div class="button-row">
+    <button class="primary-button" type="submit">Ajouter la grille</button>
+    <button class="ghost-button" id="grid-import-cancel" type="button">Annuler</button>
+  </div>
+</form>
+<section class="year-calendar" aria-label="Calendrier annuel des grilles">
+  <div class="year-calendar-header">
+    <button class="ghost-button compact-calendar-button" id="calendar-prev-year" type="button" aria-label="Année précédente">‹</button>
+    <h3 id="calendar-year-title">Année</h3>
+    <button class="ghost-button compact-calendar-button" id="calendar-next-year" type="button" aria-label="Année suivante">›</button>
+  </div>
+  <div class="year-calendar-grid" id="year-calendar-grid"></div>
+</section>
+<div class="users-table-shell" id="grids-table-shell">
+  <table class="users-table grids-table">
+    <thead>
+      <tr>
+        <th>Titre</th>
+        <th>Statut</th>
+        <th>Semaine</th>
+        <th>Publication</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="grids-table-body"></tbody>
+  </table>
+</div>

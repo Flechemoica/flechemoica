@@ -1,0 +1,78 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownUserDoc(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function editorStatuses() {
+      return ["admin", "Admin", "ADMIN", "editor", "Editor", "EDITOR", "editors", "Editors", "EDITORS"];
+    }
+
+    function hasEditorStatus(profile) {
+      return profile.status is string
+        && profile.status in editorStatuses();
+    }
+
+    function isEditor() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && hasEditorStatus(get(/databases/$(database)/documents/users/$(request.auth.uid)).data);
+    }
+
+    function isPublishedGrid() {
+      return resource.data.status == "published";
+    }
+
+    function requestedUserIdMatches(userId) {
+      return !("uid" in request.resource.data)
+        || request.resource.data.uid == request.auth.uid
+        || request.resource.data.uid == userId;
+    }
+
+    function doesNotGrantEditorAccess() {
+      return !("status" in request.resource.data)
+        || !(request.resource.data.status is string)
+        || !(request.resource.data.status in editorStatuses());
+    }
+
+    match /users/{userId} {
+      allow get: if (request.auth != null && request.auth.uid == userId) || isEditor();
+      allow list: if isEditor();
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && requestedUserIdMatches(userId)
+        && doesNotGrantEditorAccess();
+
+      allow update: if isEditor()
+        || (
+          request.auth != null
+          && request.auth.uid == userId
+          && requestedUserIdMatches(userId)
+          && doesNotGrantEditorAccess()
+        );
+
+      allow delete: if (request.auth != null && request.auth.uid == userId) || isEditor();
+    }
+
+    match /grids/{gridId} {
+      allow read: if isPublishedGrid() || isEditor();
+      allow write: if isEditor();
+    }
+
+    match /notificationLogs/{notificationId} {
+      allow read: if isEditor();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
