@@ -1,0 +1,30 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function editorStatuses() {
+      return ["admin", "Admin", "ADMIN", "editor", "Editor", "EDITOR", "editors", "Editors", "EDITORS"];
+    }
+
+    function isEditor() {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status in editorStatuses();
+    }
+
+    match /homeCommunications/{communicationId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if isEditor()
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 5 * 1024 * 1024;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
