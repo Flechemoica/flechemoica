@@ -77,6 +77,7 @@
           "font-size": "16px",
           "font-family": "Inter, Arial, sans-serif",
           height: "46px",
+          "line-height": "46px",
           padding: "0 13px",
           color: "#18212f",
           "background-color": "#ffffff",
