@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#cbb0ff">
+  <title>Paiement sécurisé - FLÈCHE-MOI ÇA</title>
+  <link rel="shortcut icon" href="/assets/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/images/icon.png">
+  <link rel="stylesheet" href="/paiement.css?v=20260719-1">
+</head>
+<body>
+  <main class="payment-shell">
+    <header class="payment-brand" aria-label="FLÈCHE-MOI ÇA">
+      <img src="/assets/images/icon.png" alt="" class="payment-brand-logo">
+      <div>
+        <p class="payment-brand-name">FLÈCHE-MOI ÇA</p>
+        <p class="payment-brand-eyebrow">Paiement sécurisé</p>
+      </div>
+    </header>
+
+    <section class="loading-panel" id="loading-panel">
+      <strong>Chargement du paiement sécurisé…</strong>
+    </section>
+
+    <div class="payment-layout is-hidden" id="payment-layout">
+      <section class="payment-panel" id="payment-panel">
+        <h1>Paiement par carte</h1>
+        <p class="payment-intro">Réglez votre facture de façon sécurisée. Aucun compte PayPal n’est nécessaire.</p>
+
+        <label class="field-label" for="client-email">E-mail du client</label>
+        <input id="client-email" readonly>
+
+        <label class="field-label">Titulaire de la carte</label>
+        <div class="paypal-field" id="card-name"></div>
+
+        <label class="field-label">Numéro de carte</label>
+        <div class="paypal-field" id="card-number"></div>
+
+        <div class="field-row">
+          <div>
+            <label class="field-label">Expiration</label>
+            <div class="paypal-field" id="card-expiry"></div>
+          </div>
+          <div>
+            <label class="field-label">Cryptogramme</label>
+            <div class="paypal-field" id="card-cvv"></div>
+          </div>
+        </div>
+
+        <label class="field-label" for="billing-address">Adresse de facturation</label>
+        <input id="billing-address" autocomplete="street-address">
+
+        <div class="field-row">
+          <div>
+            <label class="field-label" for="billing-postal">Code postal</label>
+            <input id="billing-postal" autocomplete="postal-code">
+          </div>
+          <div>
+            <label class="field-label" for="billing-city">Ville</label>
+            <input id="billing-city" autocomplete="address-level2">
+          </div>
+        </div>
+
+        <button class="payment-button" id="payment-button" type="button" disabled>Payer</button>
+        <p class="payment-status" id="payment-status" role="alert"></p>
+        <p class="payment-privacy">En payant par carte, vous reconnaissez que vos données sont traitées par PayPal conformément à sa <a href="https://www.paypal.com/fr/legalhub/paypal/privacy-full" target="_blank" rel="noopener">Déclaration de confidentialité</a>.</p>
+      </section>
+
+      <aside class="payment-panel invoice-summary">
+        <h2>Votre facture</h2>
+        <div class="summary-line"><span>N°</span><strong id="invoice-number"></strong></div>
+        <div class="summary-line"><span>Client</span><strong id="invoice-client"></strong></div>
+        <div class="summary-line summary-total"><span>À payer</span><span id="invoice-total"></span></div>
+        <p class="secure-note">🔒 Les données de carte sont saisies dans des champs sécurisés hébergés par PayPal. Elles ne transitent jamais par FLÈCHE-MOI ÇA.</p>
+      </aside>
+    </div>
+  </main>
+  <script src="/paiement.js?v=20260719-2"></script>
+</body>
+</html>
