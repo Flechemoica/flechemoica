@@ -84,6 +84,17 @@
           border: "0",
           outline: "0",
         },
+        "input:focus": {
+          border: "0",
+          outline: "0",
+          "box-shadow": "none",
+        },
+        "input.invalid": {
+          color: "#18212f",
+          border: "0",
+          outline: "0",
+          "box-shadow": "none",
+        },
       },
     });
 
