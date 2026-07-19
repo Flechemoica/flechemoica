@@ -27,6 +27,7 @@ body {
 .payment-brand-logo { display: block; width: 58px; height: 58px; object-fit: contain; image-rendering: auto; }
 .payment-brand-name { margin: 0; font-size: 1.55rem; font-style: italic; font-weight: 900; line-height: 1.05; text-transform: uppercase; }
 .payment-brand-eyebrow { margin: 4px 0 0; color: var(--accent); font-size: .78rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+.paypal-logo { display: block; width: 100px; height: auto; margin-left: auto; object-fit: contain; }
 .payment-layout { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 20px; }
 .is-hidden { display: none; }
 .payment-panel, .loading-panel { padding: 28px; border: 1px solid #d9dfea; border-radius: 12px; background: #fff; box-shadow: 0 12px 34px rgba(24, 33, 47, .08); }
@@ -34,13 +35,14 @@ body {
 h1 { margin: 0 0 8px; font-size: 28px; }
 .payment-intro { margin: 0 0 24px; color: var(--muted); }
 .field-label { display: block; margin: 15px 0 7px; font-size: 13px; font-weight: 800; }
-input, .paypal-field { width: 100%; height: 48px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+input, .paypal-field { width: 100%; height: 50px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
 input { padding: 0 13px; outline: 0; color: var(--ink); font: inherit; transition: border-color .15s, box-shadow .15s; }
 input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 111, 209, .15); }
 input[readonly] { background: #f7f8fb; color: #4b586e; }
-.paypal-field { overflow: visible; border: 0; border-radius: 0; background: transparent; }
-.paypal-field iframe { display: block; width: 100% !important; height: 100% !important; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.paypal-field { position: relative; overflow: hidden; background: #fff; transition: border-color .15s, box-shadow .15s; }
+.paypal-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(139, 111, 209, .15); }
+.paypal-field iframe { display: block; width: 100% !important; height: 48px !important; border: 0 !important; border-radius: inherit; background: transparent !important; }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .payment-button { width: 100%; margin-top: 20px; padding: 15px; border: 0; border-radius: 8px; background: var(--blue); color: #fff; font-size: 16px; font-weight: 900; cursor: pointer; }
 .payment-button:hover:not(:disabled) { background: #066aa7; }
 .payment-button:disabled { cursor: wait; opacity: .55; }
@@ -65,4 +67,11 @@ input[readonly] { background: #f7f8fb; color: #4b586e; }
   .payment-panel { padding: 20px; }
   .payment-brand-logo { width: 50px; height: 50px; }
   .payment-brand-name { font-size: 1.3rem; }
+  .paypal-logo { width: 82px; }
+}
+
+@media (max-width: 430px) {
+  .payment-brand { gap: 10px; }
+  .payment-brand-name { font-size: 1.05rem; }
+  .paypal-logo { width: 68px; }
 }

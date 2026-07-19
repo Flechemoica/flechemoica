@@ -77,6 +77,7 @@
           "font-size": "16px",
           "font-family": "Inter, Arial, sans-serif",
           height: "46px",
+          "line-height": "46px",
           padding: "0 13px",
           color: "#18212f",
           "background-color": "#ffffff",
@@ -89,7 +90,13 @@
           outline: "0",
           "box-shadow": "none",
         },
-        "input.invalid": {
+        ".invalid": {
+          color: "#18212f",
+          border: "0",
+          outline: "0",
+          "box-shadow": "none",
+        },
+        ".valid": {
           color: "#18212f",
           border: "0",
           outline: "0",
