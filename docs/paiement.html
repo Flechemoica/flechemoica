@@ -8,7 +8,7 @@
   <title>Paiement sécurisé - FLÈCHE-MOI ÇA</title>
   <link rel="shortcut icon" href="/assets/images/favicon.ico">
   <link rel="apple-touch-icon" href="/assets/images/icon.png">
-  <link rel="stylesheet" href="/paiement.css?v=20260719-1">
+  <link rel="stylesheet" href="/paiement.css?v=20260719-3">
 </head>
 <body>
   <main class="payment-shell">
@@ -27,9 +27,8 @@
     <div class="payment-layout is-hidden" id="payment-layout">
       <section class="payment-panel" id="payment-panel">
         <h1>Paiement par carte</h1>
-        <p class="payment-intro">Réglez votre facture de façon sécurisée. Aucun compte PayPal n’est nécessaire.</p>
 
-        <label class="field-label" for="client-email">E-mail du client</label>
+        <label class="field-label" for="client-email">E-mail</label>
         <input id="client-email" readonly>
 
         <label class="field-label">Titulaire de la carte</label>
@@ -72,11 +71,13 @@
         <h2>Votre facture</h2>
         <div class="summary-line"><span>N°</span><strong id="invoice-number"></strong></div>
         <div class="summary-line"><span>Client</span><strong id="invoice-client"></strong></div>
+        <div class="summary-line summary-details"><span>Adresse de facturation</span><strong id="invoice-address"></strong></div>
+        <div class="summary-line summary-details"><span>E-mail</span><strong id="invoice-email"></strong></div>
         <div class="summary-line summary-total"><span>À payer</span><span id="invoice-total"></span></div>
         <p class="secure-note">🔒 Les données de carte sont saisies dans des champs sécurisés hébergés par PayPal. Elles ne transitent jamais par FLÈCHE-MOI ÇA.</p>
       </aside>
     </div>
   </main>
-  <script src="/paiement.js?v=20260719-2"></script>
+  <script src="/paiement.js?v=20260719-3"></script>
 </body>
 </html>

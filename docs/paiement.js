@@ -45,6 +45,8 @@
     document.getElementById("billing-city").value = invoice.clientCity;
     document.getElementById("invoice-number").textContent = invoice.number;
     document.getElementById("invoice-client").textContent = invoice.clientName;
+    document.getElementById("invoice-address").textContent = [invoice.clientAddress, [invoice.clientPostalCode, invoice.clientCity].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+    document.getElementById("invoice-email").textContent = invoice.clientEmail;
     document.getElementById("invoice-total").textContent = formattedAmount;
     button.textContent = `Payer ${formattedAmount}`;
 
@@ -77,9 +79,8 @@
           appearance: "none",
           "font-size": "16px",
           "font-family": "Inter, Arial, sans-serif",
-          padding: "0 13px",
+          padding: "11px 13px",
           color: "#18212f",
-          border: "0",
           outline: "0",
         },
       },
