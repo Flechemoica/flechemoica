@@ -44,16 +44,17 @@ input[readonly] { background: #f7f8fb; color: #4b586e; }
 .payment-button { width: 100%; margin-top: 20px; padding: 15px; border: 0; border-radius: 8px; background: var(--blue); color: #fff; font-size: 16px; font-weight: 900; cursor: pointer; }
 .payment-button:hover:not(:disabled) { background: #066aa7; }
 .payment-button:disabled { cursor: wait; opacity: .55; }
-.payment-status { min-height: 20px; margin: 12px 0 0; color: #b42318; font-size: 12px; line-height: 1.5; }
-.payment-privacy { color: var(--muted); font-size: 12px; line-height: 1.5; }
-.invoice-summary { height: max-content; }
-.invoice-summary h2 { margin-top: 0; }
+.payment-status { margin: 10px 0 0; color: #b42318; font-size: 12px; line-height: 1.5; }
+.payment-status:empty { display: none; }
+.payment-privacy { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.invoice-summary { display: flex; flex-direction: column; }
+.invoice-summary h2 { margin: 0 0 8px; font-size: 28px; }
 .summary-line { display: flex; justify-content: space-between; gap: 18px; padding: 13px 0; border-bottom: 1px solid #e4e8ef; }
 .summary-details { display: block; }
 .summary-details span { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .summary-details strong { display: block; overflow-wrap: anywhere; font-size: 13px; line-height: 1.45; }
 .summary-total { border: 0; font-size: 22px; font-weight: 900; }
-.secure-note { margin: 20px 0 0; padding: 14px; border-radius: 8px; background: var(--accent-soft); font-size: 13px; line-height: 1.5; }
+.secure-note { margin: auto 0 0; padding: 14px; border-radius: 8px; background: var(--accent-soft); font-size: 13px; line-height: 1.5; }
 .payment-success { padding: 28px; text-align: center; }
 .payment-success h1 { color: #08784f; }
 
