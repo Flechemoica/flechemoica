@@ -64,7 +64,7 @@
         const response = await fetch(endpoint("capture"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderID: data.orderID }) });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload.status !== "COMPLETED") throw new Error(payload.message || "Le paiement n’a pas pu être confirmé.");
-        panel.innerHTML = '<div class="payment-success"><h1>Paiement confirmé</h1><p>Merci, le règlement de votre facture a bien été enregistré.</p></div>';
+        panel.innerHTML = '<div class="payment-success"><div class="payment-success-icon" aria-hidden="true">✓</div><h1>Paiement confirmé</h1><p>Merci, le règlement de votre facture a bien été enregistré.</p></div>';
       },
       onError: (error) => {
         button.disabled = false;
