@@ -40,12 +40,9 @@
     const formattedAmount = new Intl.NumberFormat("fr-FR", { style: "currency", currency: invoice.currency }).format(Number(invoice.amount));
 
     document.getElementById("client-email").value = invoice.clientEmail;
-    document.getElementById("billing-address").value = invoice.clientAddress;
-    document.getElementById("billing-postal").value = invoice.clientPostalCode;
-    document.getElementById("billing-city").value = invoice.clientCity;
     document.getElementById("invoice-number").textContent = invoice.number;
     document.getElementById("invoice-client").textContent = invoice.clientName;
-    document.getElementById("invoice-address").textContent = [invoice.clientAddress, [invoice.clientPostalCode, invoice.clientCity].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+    document.getElementById("invoice-address").textContent = [invoice.clientAddress, invoice.clientPostalCode, invoice.clientCity].filter(Boolean).join(" ");
     document.getElementById("invoice-email").textContent = invoice.clientEmail;
     document.getElementById("invoice-total").textContent = formattedAmount;
     button.textContent = `Payer ${formattedAmount}`;
@@ -81,6 +78,8 @@
           "font-family": "Inter, Arial, sans-serif",
           padding: "11px 13px",
           color: "#18212f",
+          "background-color": "#ffffff",
+          border: "0",
           outline: "0",
         },
       },
@@ -104,9 +103,9 @@
       try {
         await fields.submit({
           billingAddress: {
-            addressLine1: document.getElementById("billing-address").value.trim(),
-            adminArea2: document.getElementById("billing-city").value.trim(),
-            postalCode: document.getElementById("billing-postal").value.trim(),
+            addressLine1: String(invoice.clientAddress || "").trim(),
+            adminArea2: String(invoice.clientCity || "").trim(),
+            postalCode: String(invoice.clientPostalCode || "").trim(),
             countryCode: invoice.clientCountryCode,
           },
         });
