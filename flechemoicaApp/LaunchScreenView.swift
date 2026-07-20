@@ -8,14 +8,15 @@ struct LaunchScreenView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            VStack(spacing: 28) {
+            VStack(spacing: 0) {
                 Spacer()
 
-                XPLogoView(size: 142)
+                VStack(spacing: 24) {
+                    XPLogoView(size: 142)
 
-                VStack(spacing: 10) {
-                    Text("Flèche-moi ça")
-                        .font(.xpTahoma(size: 30, weight: .bold))
+                    Text("FLÈCHE-MOI ÇA")
+                        .font(.system(size: 34, weight: .black).italic())
+                        .tracking(0)
                         .foregroundStyle(.white)
 
                     XPProgressBar(progress: progress)

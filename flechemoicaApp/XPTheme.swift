@@ -25,9 +25,9 @@ struct XPTitleBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            XPLogoView(size: 24)
+            XPLogoView(size: 21)
             Text(title)
-                .font(.xpTahoma(size: 17, weight: .bold))
+                .font(.system(size: 19, weight: .heavy))
                 .lineLimit(1)
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.65), radius: 0, x: 1, y: 1)

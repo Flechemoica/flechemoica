@@ -1,4 +1,5 @@
 import AuthenticationServices
+import AppTrackingTransparency
 import Combine
 import CryptoKit
 import Foundation
@@ -40,6 +41,13 @@ struct HomeView: View {
     @State private var photoURLOverride: URL?
     @State private var isDeletingAccount = false
     @State private var hasRecordedAppLaunch = false
+    @State private var homeCommunicationConfig = HomeCommunicationConfig()
+    @State private var homeCommunications: [HomeCommunication] = []
+    @State private var answeredPollCommunicationIDs: Set<String> = []
+    @State private var homeCommunicationConfigListener: ListenerRegistration?
+    @State private var homeCommunicationsListener: ListenerRegistration?
+    @State private var adPlacementConfig = AdPlacementConfig()
+    @State private var adPlacementConfigListener: ListenerRegistration?
 
     private var displayName: String {
         if let displayNameOverride, !displayNameOverride.isEmpty {
@@ -101,6 +109,50 @@ struct HomeView: View {
 
     private var canOpenPublicProfileSettings: Bool {
         selectedPublicProfile == nil || selectedPublicProfile?.uid == user.uid
+    }
+
+    private var activeHomeCommunications: [HomeCommunication] {
+        let now = Date()
+        let visibleCommunications = homeCommunications.filter {
+            !$0.isTestMode || isEditor
+        }
+
+        if isEditor, let activeTestCommunication = visibleCommunications.first(where: {
+            $0.isTestMode && homeCommunicationConfig.activeCommunicationIDs.contains($0.id)
+        }) {
+            return [activeTestCommunication]
+        }
+
+        if let reservedAdvertisement = visibleCommunications.first(where: {
+            $0.type == .sponsored && $0.isScheduledActive(at: now)
+        }) {
+            return [reservedAdvertisement]
+        }
+
+        guard let activeCommunicationID = homeCommunicationConfig.activeCommunicationID else {
+            return [.admobCommunication]
+        }
+
+        if activeCommunicationID == HomeCommunication.admobCommunicationID {
+            return [.admobCommunication]
+        }
+
+        if let communication = visibleCommunications.first(where: { $0.id == activeCommunicationID }) {
+            guard !communication.hasSchedule || communication.isScheduledActive(at: now) else {
+                return [.admobCommunication]
+            }
+
+            // Un sondage reste affiché après le vote au lieu d'être remplacé par AdMob.
+            return [communication]
+        }
+
+        if let scheduledCommunication = visibleCommunications.first(where: {
+            $0.isScheduledActive(at: now)
+        }) {
+            return [scheduledCommunication]
+        }
+
+        return [.admobCommunication]
     }
 
     private static func isEditorProfile(_ data: [String: Any]?) -> Bool {
@@ -172,6 +224,12 @@ struct HomeView: View {
                             isLoadingRewardedAd: rewardedGridAccessAd.isLoading,
                             requiresRewardedAd: selectedGridRequiresRewardedAd,
                             selectedGridIsCompleted: selectedGridIsCompleted,
+                            selectedGridIsUpcoming: selectedGridIsUpcoming,
+                            selectedGridIsCurrent: selectedGridIsCurrent,
+                            communicationConfig: homeCommunicationConfig,
+                            activeCommunications: activeHomeCommunications,
+                            adPlacementConfig: adPlacementConfig,
+                            pollVoteAction: voteInPoll,
                             profileAction: openOwnProfile,
                             previousGridAction: showPreviousGrid,
                             nextGridAction: showNextGrid,
@@ -188,6 +246,9 @@ struct HomeView: View {
         }
         .task(id: user.uid) {
             guard !isDeletingAccount else { return }
+            // Un changement de compte ne doit jamais conserver les droits editor
+            // du compte précédent pendant le chargement du nouveau profil.
+            isEditor = false
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
             openPendingNotificationGridIfNeeded()
@@ -197,6 +258,12 @@ struct HomeView: View {
             await refreshAuthenticatedProfile()
             await loadPublishedGrids()
             openPendingNotificationGridIfNeeded()
+        }
+        .onAppear {
+            startHomeCommunicationListeners()
+        }
+        .onDisappear {
+            stopHomeCommunicationListeners()
         }
         .onReceive(NotificationCenter.default.publisher(for: .weeklyGridNotificationSelected)) { notification in
             guard let gridID = notification.userInfo?["gridID"] as? String, !gridID.isEmpty else {
@@ -262,6 +329,9 @@ struct HomeView: View {
             )
             await recordAppLaunchIfNeeded(document: document)
         } catch {
+            // En cas d'échec réseau ou Firestore, le comportement sûr consiste à
+            // masquer les communications réservées aux comptes editor.
+            isEditor = false
             return
         }
     }
@@ -310,15 +380,42 @@ struct HomeView: View {
     }
 
     private var selectedGridRequiresRewardedAd: Bool {
-        guard let selectedPublishedGrid else { return false }
-        return selectedGridIndex > 0
+        guard let selectedPublishedGrid, !selectedPublishedGrid.isUpcoming else {
+            return false
+        }
+
+        guard adPlacementConfig.isEnabled("rewardedGrid") else {
+            return false
+        }
+
+        return !selectedGridIsCurrent
             && !isGridCompleted(selectedPublishedGrid)
             && !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id)
     }
 
     private var selectedGridIsCompleted: Bool {
-        guard let selectedPublishedGrid else { return false }
+        guard let selectedPublishedGrid, !selectedPublishedGrid.isUpcoming else { return false }
         return isGridCompleted(selectedPublishedGrid)
+    }
+
+    private var selectedGridIsUpcoming: Bool {
+        selectedPublishedGrid?.isUpcoming ?? false
+    }
+
+    private var selectedGridIsCurrent: Bool {
+        guard let selectedPublishedGrid, !selectedPublishedGrid.isUpcoming else {
+            return false
+        }
+
+        let availableGrids = publishedGrids.filter { !$0.isUpcoming }
+
+        guard let currentGrid = availableGrids.max(by: {
+            $0.releaseAt < $1.releaseAt
+        }) else {
+            return false
+        }
+
+        return selectedPublishedGrid.id == currentGrid.id
     }
 
     private func isGridCompleted(_ grid: PublishedGrid) -> Bool {
@@ -342,8 +439,11 @@ struct HomeView: View {
         isLoadingPublishedGrids = true
         gridLoadingMessage = nil
 
+        let previouslySelectedGridID = selectedPublishedGrid?.id
+
         do {
             let database = Firestore.firestore()
+
             let snapshot = try await database
                 .collection("grids")
                 .whereField("type", isEqualTo: "WeeklyGrid")
@@ -351,11 +451,38 @@ struct HomeView: View {
                 .limit(to: 50)
                 .getDocuments()
 
-            publishedGrids = snapshot.documents
+            let allGrids = snapshot.documents
                 .compactMap(PublishedGrid.init(document:))
+
+            let nextUpcomingGrid = allGrids
+                .filter { $0.isUpcoming }
+                .min { $0.releaseAt < $1.releaseAt }
+
+            let availableGrids = allGrids
+                .filter { !$0.isUpcoming }
                 .sorted { $0.releaseAt > $1.releaseAt }
-            selectedGridIndex = publishedGrids.isEmpty ? 0 : min(selectedGridIndex, publishedGrids.count - 1)
-            gridLoadingMessage = publishedGrids.isEmpty ? "Aucune grille publiee" : nil
+
+            publishedGrids = []
+
+            if let nextUpcomingGrid {
+                publishedGrids.append(nextUpcomingGrid)
+            }
+
+            publishedGrids.append(contentsOf: availableGrids)
+
+            if let previouslySelectedGridID,
+               let preservedIndex = publishedGrids.firstIndex(where: {
+                   $0.id == previouslySelectedGridID
+               }) {
+                selectedGridIndex = preservedIndex
+            } else {
+                selectedGridIndex = defaultSelectedGridIndex(in: publishedGrids)
+            }
+
+            gridLoadingMessage = publishedGrids.isEmpty
+                ? "Aucune grille publiee"
+                : nil
+
             await loadCompletedPlayerCounts()
         } catch {
             let nsError = error as NSError
@@ -363,6 +490,126 @@ struct HomeView: View {
         }
 
         isLoadingPublishedGrids = false
+    }
+
+    private func defaultSelectedGridIndex(in grids: [PublishedGrid]) -> Int {
+        grids.firstIndex(where: { !$0.isUpcoming }) ?? 0
+    }
+
+    private func startHomeCommunicationListeners() {
+        let database = Firestore.firestore()
+
+        if homeCommunicationConfigListener == nil {
+            homeCommunicationConfigListener = database
+                .collection("appConfiguration")
+                .document("homeCommunication")
+                .addSnapshotListener { snapshot, error in
+                    Task { @MainActor in
+                        if let error {
+                            print("Home communication config listener failed: \(error.localizedDescription)")
+                            return
+                        }
+
+                        homeCommunicationConfig = HomeCommunicationConfig(snapshot: snapshot)
+                        await refreshAnsweredActivePoll()
+                    }
+                }
+        }
+
+        if homeCommunicationsListener == nil {
+            homeCommunicationsListener = database
+                .collection("homeCommunications")
+                .order(by: "createdAt", descending: true)
+                .limit(to: 30)
+                .addSnapshotListener { snapshot, error in
+                    Task { @MainActor in
+                        if let error {
+                            print("Home communications listener failed: \(error.localizedDescription)")
+                            return
+                        }
+
+                        homeCommunications = snapshot?.documents.compactMap(HomeCommunication.init(document:)) ?? []
+                        await refreshAnsweredActivePoll()
+                    }
+                }
+        }
+
+        if adPlacementConfigListener == nil {
+            adPlacementConfigListener = database
+                .collection("appConfiguration")
+                .document("adPlacements")
+                .addSnapshotListener { snapshot, error in
+                    Task { @MainActor in
+                        if let error {
+                            print("Ad placement config listener failed: \(error.localizedDescription)")
+                            return
+                        }
+
+                        adPlacementConfig = AdPlacementConfig(snapshot: snapshot)
+                    }
+                }
+        }
+    }
+
+    private func stopHomeCommunicationListeners() {
+        homeCommunicationConfigListener?.remove()
+        homeCommunicationsListener?.remove()
+        adPlacementConfigListener?.remove()
+        homeCommunicationConfigListener = nil
+        homeCommunicationsListener = nil
+        adPlacementConfigListener = nil
+    }
+
+    private func refreshAnsweredActivePoll() async {
+        guard let communication = activeHomeCommunications.first,
+              communication.type == .poll else {
+            return
+        }
+
+        if answeredPollCommunicationIDs.contains(communication.id) {
+            return
+        }
+
+        do {
+            let vote = try await Firestore.firestore()
+                .collection("homeCommunications")
+                .document(communication.id)
+                .collection("votes")
+                .document(user.uid)
+                .getDocument()
+
+            if vote.exists {
+                answeredPollCommunicationIDs.insert(communication.id)
+            }
+        } catch {
+            print("Poll vote state load failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func voteInPoll(_ communication: HomeCommunication, option: String) {
+        let selectedOption = option.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard communication.type == .poll, !selectedOption.isEmpty else { return }
+
+        answeredPollCommunicationIDs.insert(communication.id)
+
+        Firestore.firestore()
+            .collection("homeCommunications")
+            .document(communication.id)
+            .collection("votes")
+            .document(user.uid)
+            .setData([
+                "communicationID": communication.id,
+                "userID": user.uid,
+                "option": selectedOption,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true) { error in
+                if let error {
+                    Task { @MainActor in
+                        answeredPollCommunicationIDs.remove(communication.id)
+                        print("Poll vote failed: \(error.localizedDescription)")
+                    }
+                }
+            }
     }
 
     private func loadCompletedPlayerCounts() async {
@@ -399,10 +646,25 @@ struct HomeView: View {
     }
 
     private func playSelectedGrid() {
-        guard let selectedPublishedGrid else { return }
+        guard let selectedPublishedGrid else {
+            return
+        }
+
         gridAccessMessage = nil
 
-        guard selectedGridIndex > 0, !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id) else {
+        guard !selectedPublishedGrid.isUpcoming else {
+            gridAccessMessage = "Cette grille sera disponible le \(selectedPublishedGrid.formattedReleaseDate)."
+            return
+        }
+
+        guard !selectedGridIsCurrent,
+              !isGridCompleted(selectedPublishedGrid),
+              !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id) else {
+            openGrid(selectedPublishedGrid)
+            return
+        }
+
+        guard adPlacementConfig.isEnabled("rewardedGrid") else {
             openGrid(selectedPublishedGrid)
             return
         }
@@ -427,6 +689,12 @@ struct HomeView: View {
 
     @MainActor
     private func openGrid(_ grid: PublishedGrid) {
+        guard !grid.isUpcoming else {
+            gridAccessMessage = "Cette grille sera disponible le \(grid.formattedReleaseDate)."
+            selectedGameGrid = nil
+            return
+        }
+
         guard grid.isPlayable else {
             gridAccessMessage = "Cette grille est indisponible."
             selectedGameGrid = nil
@@ -674,18 +942,25 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
     }
 
     @discardableResult
-    private func loadAd(customData: String) async throws -> RewardedAd {
+    private func loadAd(customData: String, retryCount: Int = 2) async throws -> RewardedAd {
         isLoading = true
         defer { isLoading = false }
 
         await AdMobConfiguration.refreshTestAdsStatus()
-        let ad = try await RewardedAd.load(with: effectiveAdUnitID, request: Request())
-        let options = ServerSideVerificationOptions()
-        options.customRewardText = customData
-        ad.serverSideVerificationOptions = options
-        ad.fullScreenContentDelegate = self
-        rewardedAd = ad
-        return ad
+
+        do {
+            let ad = try await RewardedAd.load(with: effectiveAdUnitID, request: Request())
+            let options = ServerSideVerificationOptions()
+            options.customRewardText = customData
+            ad.serverSideVerificationOptions = options
+            ad.fullScreenContentDelegate = self
+            rewardedAd = ad
+            return ad
+        } catch {
+            guard retryCount > 0 else { throw error }
+            try await Task.sleep(nanoseconds: 800_000_000)
+            return try await loadAd(customData: customData, retryCount: retryCount - 1)
+        }
     }
 
     private func finishRewardFlow(earnedReward: Bool) {
@@ -779,8 +1054,12 @@ private struct PublishedGrid: Identifiable {
         Self.releaseDateFormatter.string(from: releaseAt)
     }
 
+    var isUpcoming: Bool {
+        releaseAt > Date()
+    }
+
     var isPlayable: Bool {
-        guard let crosswordGrid else { return false }
+        guard !isUpcoming, let crosswordGrid else { return false }
         return !crosswordGrid.placedWords.isEmpty && !crosswordGrid.solutionLetters.isEmpty
     }
 
@@ -832,7 +1111,12 @@ private struct CrosswordGrid {
         Dictionary(grouping: placedWords, by: \.definitionCell)
             .mapValues { words in
                 words.sorted { lhs, rhs in
-                    lhs.definitionSlotPriority < rhs.definitionSlotPriority
+                    // Les définitions horizontales sont affichées avant les verticales
+                    if lhs.isVertical != rhs.isVertical {
+                        return !lhs.isVertical
+                    }
+
+                    return lhs.definitionSlotPriority < rhs.definitionSlotPriority
                 }
             }
     }
@@ -907,17 +1191,51 @@ private struct CrosswordWord: Identifiable {
             )
         }
     }
+    
+    var isVertical: Bool {
+
+        direction.rowDelta == 1 && direction.columnDelta == 0
+
+    }
 
     var arrowSymbol: String {
         direction.rowDelta == 1 ? "↓" : "→"
     }
 
-    var definitionSlotPriority: Int {
-        if direction.rowDelta == 0 {
-            return direction.startRowDelta == 1 ? 1 : 0
+    var arrowStyle: DefinitionArrowStyle {
+        if direction.rowDelta == 1 && direction.columnDelta == 0 {
+            return direction.startColumnDelta == 1 ? .cornerDownRight : .down
         }
 
-        return direction.startColumnDelta == 1 ? 0 : 1
+        if direction.rowDelta == 0 && direction.columnDelta == 1 {
+            return direction.startRowDelta == 1 ? .cornerRightDown : .right
+        }
+
+        return .right
+    }
+
+    var definitionSlotPriority: Int {
+        arrowStyle.sortPriority
+    }
+}
+
+private enum DefinitionArrowStyle {
+    case right
+    case down
+    case cornerDownRight
+    case cornerRightDown
+
+    var sortPriority: Int {
+        switch self {
+        case .cornerDownRight:
+            return 0
+        case .down:
+            return 1
+        case .right:
+            return 2
+        case .cornerRightDown:
+            return 3
+        }
     }
 }
 
@@ -991,6 +1309,334 @@ private struct PublicProfile: Identifiable {
     }
 }
 
+private struct HomeCommunicationConfig {
+    var isEnabled = true
+    var activeCommunicationIDs: Set<String> = []
+    var activeCommunicationID: String?
+    var blockHeightPX = 500
+    var communicationPositions: [String: Int] = [:]
+
+    init() {}
+
+    init(snapshot: DocumentSnapshot?) {
+        guard let data = snapshot?.data() else { return }
+        let activeIDs = data["activeCommunicationIDs"] as? [String] ?? []
+        isEnabled = data["isEnabled"] as? Bool ?? true
+        activeCommunicationIDs = Set(activeIDs)
+        activeCommunicationID = activeIDs.first
+        blockHeightPX = Self.normalizedBlockHeight(data["blockHeightPX"])
+        communicationPositions = (data["communicationPositions"] as? [String: Any] ?? [:]).reduce(into: [:]) {
+            $0[$1.key] = min(3, max(1, ($1.value as? NSNumber)?.intValue ?? 2))
+        }
+    }
+
+    var blockHeightPoints: CGFloat {
+        CGFloat(blockHeightPX) / UIScreen.main.scale
+    }
+
+    private static func normalizedBlockHeight(_ value: Any?) -> Int {
+        let rawHeight: Int
+        if let value = value as? Int {
+            rawHeight = value
+        } else if let value = value as? Double {
+            rawHeight = Int(value.rounded())
+        } else if let value = value as? NSNumber {
+            rawHeight = value.intValue
+        } else {
+            rawHeight = 500
+        }
+
+        return min(1100, max(120, rawHeight))
+    }
+}
+
+private struct AdPlacementConfig {
+    var placements: [String: AdPlacementRule] = [:]
+
+    init() {}
+
+    init(snapshot: DocumentSnapshot?) {
+        guard let data = snapshot?.data(),
+              let rawPlacements = data["placements"] as? [String: [String: Any]] else {
+            return
+        }
+
+        placements = rawPlacements.mapValues(AdPlacementRule.init(data:))
+    }
+
+    func isEnabled(_ placementID: String, at date: Date = Date()) -> Bool {
+        guard let placement = placements[placementID] else {
+            return true
+        }
+
+        return placement.isEnabled(at: date)
+    }
+}
+
+private struct AdPlacementRule {
+    var isEnabled = true
+    var startsAt: Date?
+    var endsAt: Date?
+
+    nonisolated init(data: [String: Any]) {
+        isEnabled = data["isEnabled"] as? Bool ?? true
+        startsAt = (data["startsAt"] as? Timestamp)?.dateValue()
+        endsAt = (data["endsAt"] as? Timestamp)?.dateValue()
+    }
+
+    func isEnabled(at date: Date) -> Bool {
+        guard isEnabled else { return false }
+
+        if let startsAt, date < startsAt {
+            return false
+        }
+
+        if let endsAt, date > endsAt {
+            return false
+        }
+
+        return true
+    }
+}
+
+private struct HomeCommunication: Identifiable {
+    static let admobCommunicationID = "admobCommunication"
+
+    static let admobCommunication = HomeCommunication(
+        id: admobCommunicationID,
+        type: .ad,
+        text: "Publicité AdMob",
+        imageOverlayText: "",
+        pollOptions: [],
+        imageURL: nil,
+        imageDataBase64: nil,
+        storagePath: nil,
+        clientName: "",
+        destinationURL: nil,
+        isTestMode: false,
+        imageWidth: nil,
+        imageHeight: nil,
+        mediaKind: "image",
+        displayPeriods: [],
+        position: 2,
+        startsAt: nil,
+        endsAt: nil,
+        createdAt: .distantFuture
+    )
+
+    enum CommunicationType: String {
+        case text
+        case image
+        case poll
+        case ad
+        case sponsored
+    }
+
+    let id: String
+    let type: CommunicationType
+    let text: String
+    let imageOverlayText: String
+    let pollOptions: [String]
+    let imageURL: String?
+    let imageDataBase64: String?
+    let storagePath: String?
+    let clientName: String
+    let destinationURL: URL?
+    let isTestMode: Bool
+    let imageWidth: CGFloat?
+    let imageHeight: CGFloat?
+    let mediaKind: String
+    let displayPeriods: [DisplayPeriod]
+    let position: Int
+    let startsAt: Date?
+    let endsAt: Date?
+    let createdAt: Date
+
+    private init(
+        id: String,
+        type: CommunicationType,
+        text: String,
+        imageOverlayText: String,
+        pollOptions: [String],
+        imageURL: String?,
+        imageDataBase64: String?,
+        storagePath: String?,
+        clientName: String,
+        destinationURL: URL?,
+        isTestMode: Bool,
+        imageWidth: CGFloat?,
+        imageHeight: CGFloat?,
+        mediaKind: String,
+        displayPeriods: [DisplayPeriod],
+        position: Int,
+        startsAt: Date?,
+        endsAt: Date?,
+        createdAt: Date
+    ) {
+        self.id = id
+        self.type = type
+        self.text = text
+        self.imageOverlayText = imageOverlayText
+        self.pollOptions = pollOptions
+        self.imageURL = imageURL
+        self.imageDataBase64 = imageDataBase64
+        self.storagePath = storagePath
+        self.clientName = clientName
+        self.destinationURL = destinationURL
+        self.isTestMode = isTestMode
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+        self.mediaKind = mediaKind
+        self.displayPeriods = displayPeriods
+        self.position = position
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        self.createdAt = createdAt
+    }
+
+    init?(document: QueryDocumentSnapshot) {
+        let data = document.data()
+        let text = data["text"] as? String ?? ""
+        let imageOverlayText = data["imageOverlayText"] as? String ?? ""
+        let rawType = data["type"] as? String ?? ""
+        let storedType = CommunicationType(rawValue: rawType)
+        let pollOptions = data["pollOptions"] as? [String] ?? []
+        let imageURL = data["imageURL"] as? String
+        let imageDataBase64 = data["imageDataBase64"] as? String
+        let storagePath = data["storagePath"] as? String
+        let clientName = data["clientName"] as? String ?? ""
+        let destinationURL = (data["destinationURL"] as? String).flatMap(URL.init(string:))
+        let isTestMode = data["isTestMode"] as? Bool ?? false
+        let imageWidth = (data["imageWidth"] as? NSNumber).map { CGFloat($0.doubleValue) }
+        let imageHeight = (data["imageHeight"] as? NSNumber).map { CGFloat($0.doubleValue) }
+        let mediaKind = data["mediaKind"] as? String ?? "image"
+        let displayPeriods = (data["displayPeriods"] as? [[String: Any]] ?? [])
+            .compactMap(DisplayPeriod.init(data:))
+        let position = min(3, max(1, (data["position"] as? NSNumber)?.intValue ?? 2))
+        let startsAt = (data["startsAt"] as? Timestamp)?.dateValue()
+        let endsAt = (data["endsAt"] as? Timestamp)?.dateValue()
+
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || imageURL?.isEmpty == false
+                || imageDataBase64?.isEmpty == false
+                || storedType == .ad
+                || storedType == .sponsored
+                || (storedType == .poll && pollOptions.count >= 2) else {
+            return nil
+        }
+
+        id = document.documentID
+        type = storedType ?? (imageURL?.isEmpty == false || imageDataBase64?.isEmpty == false ? .image : .text)
+        self.text = text
+        self.imageOverlayText = imageOverlayText
+        self.pollOptions = pollOptions
+        self.imageURL = imageURL
+        self.imageDataBase64 = imageDataBase64
+        self.storagePath = storagePath
+        self.clientName = clientName
+        self.destinationURL = destinationURL
+        self.isTestMode = isTestMode
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+        self.mediaKind = mediaKind
+        self.displayPeriods = displayPeriods
+        self.position = position
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+        createdAt = (data["createdAt"] as? Timestamp)?.dateValue() ?? .distantPast
+    }
+
+    var hasSchedule: Bool {
+        !displayPeriods.isEmpty || startsAt != nil || endsAt != nil
+    }
+
+    func isScheduledActive(at date: Date) -> Bool {
+        guard hasSchedule else { return false }
+
+        if !displayPeriods.isEmpty {
+            return displayPeriods.contains { $0.contains(date) }
+        }
+
+        if let startsAt, date < startsAt {
+            return false
+        }
+
+        if let endsAt, date > endsAt {
+            return false
+        }
+
+        return true
+    }
+
+    var imageAspectRatio: CGFloat? {
+        guard let imageWidth, let imageHeight, imageWidth > 0, imageHeight > 0 else { return nil }
+        return imageWidth / imageHeight
+    }
+
+    var hasImage: Bool {
+        imageURL?.isEmpty == false || imageDataBase64?.isEmpty == false || storagePath?.isEmpty == false
+    }
+
+    var image: UIImage? {
+        guard let imageDataBase64,
+              let data = Data(base64Encoded: imageDataBase64) else {
+            return nil
+        }
+
+        return UIImage(data: data)
+    }
+}
+
+private struct DisplayPeriod {
+    let startsAt: Date
+    let endsAt: Date
+
+    nonisolated init?(data: [String: Any]) {
+        guard let startsAt = (data["startsAt"] as? Timestamp)?.dateValue(),
+              let endsAt = (data["endsAt"] as? Timestamp)?.dateValue(),
+              startsAt < endsAt else { return nil }
+        self.startsAt = startsAt
+        self.endsAt = endsAt
+    }
+
+    func contains(_ date: Date) -> Bool {
+        startsAt <= date && date < endsAt
+    }
+}
+
+private enum SponsoredAdStatsRecorder {
+    static func record(communicationID: String, userID: String, isEditor: Bool, event: String) {
+        guard !isEditor else { return }
+        guard event == "impression" || event == "click" else { return }
+
+        var data: [String: Any] = [
+            "communicationID": communicationID,
+            "event": event
+        ]
+        if ATTrackingManager.trackingAuthorizationStatus == .authorized {
+            let digest = SHA256.hash(data: Data("\(communicationID):\(userID)".utf8))
+            data["visitorID"] = digest.map { String(format: "%02x", $0) }.joined()
+            data["trackingConsent"] = "attAuthorized"
+        }
+
+        Task {
+            guard let currentUser = Auth.auth().currentUser,
+                  let endpoint = URL(string: "https://europe-west1-flechemoica.cloudfunctions.net/recordSponsoredAdEvent") else { return }
+            do {
+                let token = try await currentUser.getIDToken()
+                var request = URLRequest(url: endpoint)
+                request.httpMethod = "POST"
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                request.httpBody = try JSONSerialization.data(withJSONObject: ["data": data])
+                _ = try await URLSession.shared.data(for: request)
+            } catch {
+                return
+            }
+        }
+    }
+}
+
 private struct HomeContent: View {
     let userID: String
     let displayName: String
@@ -1005,14 +1651,43 @@ private struct HomeContent: View {
     let isLoadingRewardedAd: Bool
     let requiresRewardedAd: Bool
     let selectedGridIsCompleted: Bool
+    let selectedGridIsUpcoming: Bool
+    let selectedGridIsCurrent: Bool
+    let communicationConfig: HomeCommunicationConfig
+    let activeCommunications: [HomeCommunication]
+    let adPlacementConfig: AdPlacementConfig
+    let pollVoteAction: (HomeCommunication, String) -> Void
     let profileAction: () -> Void
     let previousGridAction: () -> Void
     let nextGridAction: () -> Void
     let playGridAction: () -> Void
     let wizzAction: () -> Void
 
+    @State private var contentWidth: CGFloat = UIScreen.main.bounds.width - 34
+
+    private var adBlockHeight: CGFloat {
+        (contentWidth / (16 / 9)) + 78
+    }
+
+    private var sponsoredBlockHeight: CGFloat {
+        let ratio = activeCommunications.first(where: { $0.type == .sponsored })?.imageAspectRatio ?? (16 / 9)
+        return contentWidth / ratio
+    }
+
+    private var activeCommunicationPosition: Int {
+        guard let communication = activeCommunications.first else { return 2 }
+        if communication.id == HomeCommunication.admobCommunicationID {
+            return communicationConfig.communicationPositions[communication.id] ?? 2
+        }
+        return communication.position
+    }
+
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 14) {
+            if activeCommunicationPosition == 1 {
+                announcementCard
+            }
+
             Button(action: profileAction) {
                 ProfileSummaryCard(
                     displayName: displayName,
@@ -1021,6 +1696,10 @@ private struct HomeContent: View {
                 )
             }
             .buttonStyle(.plain)
+
+            if activeCommunicationPosition == 2 {
+                announcementCard
+            }
 
             PublishedGridCard(
                 grid: selectedGrid,
@@ -1032,18 +1711,48 @@ private struct HomeContent: View {
                 isLoadingRewardedAd: isLoadingRewardedAd,
                 requiresRewardedAd: requiresRewardedAd,
                 isCompleted: selectedGridIsCompleted,
+                isUpcoming: selectedGridIsUpcoming,
+                isCurrent: selectedGridIsCurrent,
                 previousAction: previousGridAction,
                 nextAction: nextGridAction,
                 playAction: playGridAction
             )
 
-            HomeNativeAdCard(adUnitID: "ca-app-pub-1003964550278910/3236151939", userID: userID)
+            if activeCommunicationPosition == 3 {
+                announcementCard
+            }
 
             Spacer(minLength: 0)
 
             WizzFooter(wizzAction: wizzAction)
         }
         .padding(14)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { contentWidth = proxy.size.width - 28 }
+                    .onChange(of: proxy.size.width) { _, width in
+                        contentWidth = width - 28
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var announcementCard: some View {
+        if communicationConfig.isEnabled && !activeCommunications.isEmpty {
+            HomeAnnouncementCard(
+                communications: activeCommunications,
+                config: communicationConfig,
+                adPlacementConfig: adPlacementConfig,
+                userID: userID,
+                isEditor: isEditor,
+                adMediaAspectRatio: 16 / 9,
+                adBlockHeight: adBlockHeight,
+                sponsoredBlockHeight: sponsoredBlockHeight,
+                pollVoteAction: pollVoteAction
+            )
+        }
     }
 }
 
@@ -1200,6 +1909,304 @@ private struct PublicProfileListCard: View {
     }
 }
 
+private struct HomeAnnouncementCard: View {
+    let communications: [HomeCommunication]
+    let config: HomeCommunicationConfig
+    let adPlacementConfig: AdPlacementConfig
+    let userID: String
+    let isEditor: Bool
+    let adMediaAspectRatio: CGFloat
+    let adBlockHeight: CGFloat
+    let sponsoredBlockHeight: CGFloat
+    let pollVoteAction: (HomeCommunication, String) -> Void
+
+    var body: some View {
+        Group {
+            if !config.isEnabled {
+                placeholderView(status: "Bloc desactive")
+            } else if communications.isEmpty {
+                placeholderView(status: "Aucune communication")
+            } else if communications.count == 1, let communication = communications.first {
+                HomeCommunicationSlide(
+                    communication: communication,
+                    adPlacementConfig: adPlacementConfig,
+                    userID: userID,
+                    isEditor: isEditor,
+                    adMediaAspectRatio: adMediaAspectRatio,
+                    pollVoteAction: pollVoteAction
+                )
+            } else {
+                TabView {
+                    ForEach(communications) { communication in
+                        HomeCommunicationSlide(
+                            communication: communication,
+                            adPlacementConfig: adPlacementConfig,
+                            userID: userID,
+                            isEditor: isEditor,
+                            adMediaAspectRatio: adMediaAspectRatio,
+                            pollVoteAction: pollVoteAction
+                        )
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: blockHeight)
+        .clipped()
+        .overlay {
+            Rectangle()
+                .stroke(
+                    Color(red: 0.5, green: 0.62, blue: 0.73),
+                    lineWidth: 2
+                )
+        }
+    }
+
+    private var blockHeight: CGFloat {
+        if communications.contains(where: { $0.type == .ad }) { return adBlockHeight }
+        if communications.contains(where: { $0.type == .sponsored }) { return sponsoredBlockHeight }
+        return config.blockHeightPoints
+    }
+
+    private func placeholderView(status: String) -> some View {
+        GeometryReader { proxy in
+            let scale = UIScreen.main.scale
+            let width = Int((proxy.size.width * scale).rounded())
+            let height = Int((proxy.size.height * scale).rounded())
+
+            ZStack {
+                Color.white
+
+                VStack(spacing: 6) {
+                    Text(status)
+                        .font(.xpTahoma(size: 17, weight: .bold))
+                        .foregroundStyle(.black.opacity(0.65))
+
+                    Text("\(width) x \(height) px")
+                        .font(.custom("Tahoma", size: 13))
+                        .foregroundStyle(.black.opacity(0.58))
+                }
+            }
+        }
+    }
+}
+
+private struct RemoteAnimatedMediaView: UIViewRepresentable {
+    let url: URL
+    let isVideo: Bool
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = []
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.isScrollEnabled = false
+        webView.isUserInteractionEnabled = false
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        let source = url.absoluteString
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+        let mediaTag = isVideo
+            ? "<video src=\"\(source)\" autoplay muted loop playsinline></video>"
+            : "<img src=\"\(source)\" alt=\"\">"
+        webView.loadHTMLString("""
+        <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+        <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}img,video{width:100%;height:100%;object-fit:cover}</style>
+        \(mediaTag)
+        """, baseURL: nil)
+    }
+}
+
+private struct HomeCommunicationSlide: View {
+    let communication: HomeCommunication
+    let adPlacementConfig: AdPlacementConfig
+    let userID: String
+    let isEditor: Bool
+    let adMediaAspectRatio: CGFloat
+    let pollVoteAction: (HomeCommunication, String) -> Void
+    @State private var didRecordSponsoredImpression = false
+
+    var body: some View {
+        Group {
+            switch communication.type {
+            case .poll:
+                pollView
+            case .ad:
+                adView
+            case .sponsored:
+                sponsoredView
+            case .image, .text:
+                imageOrTextView
+            }
+        }
+        .clipped()
+    }
+
+    private var sponsoredView: some View {
+        Button {
+            guard let destinationURL = communication.destinationURL else { return }
+            SponsoredAdStatsRecorder.record(
+                communicationID: communication.id,
+                userID: userID,
+                isEditor: isEditor,
+                event: "click"
+            )
+            UIApplication.shared.open(destinationURL)
+        } label: {
+            ZStack(alignment: .topLeading) {
+                Color.white
+                communicationImage
+
+                Text("Annonce")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 9)
+                    .frame(height: 20)
+                    .background(Color(red: 192 / 255, green: 173 / 255, blue: 238 / 255))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                    .padding(10)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Annonce de \(communication.clientName)")
+        .onAppear {
+            guard !didRecordSponsoredImpression else { return }
+            didRecordSponsoredImpression = true
+            SponsoredAdStatsRecorder.record(
+                communicationID: communication.id,
+                userID: userID,
+                isEditor: isEditor,
+                event: "impression"
+            )
+        }
+    }
+
+    private var imageOrTextView: some View {
+        ZStack {
+            Color.white
+
+            communicationImage
+
+            if communication.type == .image,
+               !communication.imageOverlayText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                imageOverlayText
+            } else if !communication.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                communicationText
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .background(communication.hasImage ? Color.white.opacity(0.78) : Color.clear)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var communicationImage: some View {
+        if let image = communication.image {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else if let imageURL = communication.imageURL, let url = URL(string: imageURL) {
+            if communication.mediaKind == "video" || communication.mediaKind == "gif" {
+                RemoteAnimatedMediaView(url: url, isVideo: communication.mediaKind == "video")
+            } else {
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    ProgressView()
+                } failure: {
+                    communicationText
+                }
+            }
+        }
+    }
+
+    private var pollView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(communication.text)
+                .font(.xpTahoma(size: 17, weight: .bold))
+                .foregroundStyle(.black)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+
+            VStack(spacing: 7) {
+                ForEach(Array(communication.pollOptions.prefix(4)), id: \.self) { option in
+                    Button {
+                        pollVoteAction(communication, option)
+                    } label: {
+                        Text(option)
+                            .font(.xpTahoma(size: 13, weight: .bold))
+                            .foregroundStyle(.black)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                            .background(Color.white)
+                            .overlay(Rectangle().stroke(Color.black.opacity(0.22), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.xpPanel)
+    }
+
+    private var adView: some View {
+        Group {
+            if adPlacementConfig.isEnabled("communicationBlock") {
+                HomeNativeAdCard(
+                    adUnitID: "ca-app-pub-1003964550278910/6276883284",
+                    userID: userID,
+                    mediaAspectRatio: adMediaAspectRatio,
+                    fillsAvailableSpace: true
+                )
+            } else {
+                Color.white
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.xpPanel)
+    }
+
+    private var communicationText: some View {
+        Text(communication.text)
+            .font(.xpTahoma(size: 17, weight: .bold))
+            .foregroundStyle(.black)
+            .multilineTextAlignment(.center)
+            .lineLimit(4)
+            .minimumScaleFactor(0.78)
+    }
+
+    private var imageOverlayText: some View {
+        GeometryReader { proxy in
+            let fontSize = min(52, max(19, proxy.size.height * 0.105))
+            let trailingPadding = max(12, proxy.size.width * 0.033)
+            let bottomPadding = max(8, proxy.size.height * 0.04)
+
+            Text(communication.imageOverlayText.uppercased())
+                .font(.system(size: fontSize, weight: .heavy).italic())
+                .foregroundStyle(.black)
+                .lineLimit(3)
+                .minimumScaleFactor(0.62)
+                .multilineTextAlignment(.trailing)
+                .allowsTightening(true)
+                .frame(maxWidth: proxy.size.width * 0.78, maxHeight: .infinity, alignment: .bottomTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, trailingPadding)
+                .padding(.bottom, bottomPadding)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 private struct PublishedGridCard: View {
     let grid: PublishedGrid?
     let selectedIndex: Int
@@ -1210,6 +2217,8 @@ private struct PublishedGridCard: View {
     let isLoadingRewardedAd: Bool
     let requiresRewardedAd: Bool
     let isCompleted: Bool
+    let isUpcoming: Bool
+    let isCurrent: Bool
     let previousAction: () -> Void
     let nextAction: () -> Void
     let playAction: () -> Void
@@ -1222,9 +2231,21 @@ private struct PublishedGridCard: View {
         selectedIndex > 0
     }
 
+    private var gridStatusTitle: String {
+        if isUpcoming {
+            return "Grille à venir"
+        }
+
+        return isCurrent ? "Grille de la semaine" : "Grille précédente"
+    }
+
     private var playButtonTitle: String {
         if isCompleted {
             return "Revoir"
+        }
+
+        if isUpcoming {
+            return "A venir"
         }
 
         if isLoadingRewardedAd {
@@ -1237,7 +2258,7 @@ private struct PublishedGridCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(selectedIndex == 0 ? "Grille de la semaine" : "Grille précédente")
+                Text(gridStatusTitle)
                     .font(.custom("Tahoma", size: 13))
                     .foregroundStyle(.black.opacity(0.7))
 
@@ -1256,15 +2277,17 @@ private struct PublishedGridCard: View {
                         }
                     }
 
-                    Text("Publiee le \(grid.formattedReleaseDate)")
+                    Text("📅 \(isUpcoming ? "Disponible le" : "Publiée le") \(grid.formattedReleaseDate)")
                         .font(.custom("Tahoma", size: 13))
                         .foregroundStyle(.black.opacity(0.72))
                         .lineLimit(1)
 
-                    Text("\(grid.completedPlayerCount) \(grid.completedPlayerCount > 1 ? "joueurs ont" : "joueur a") terminé cette grille")
-                        .font(.custom("Tahoma", size: 13))
-                        .foregroundStyle(.black.opacity(0.72))
-                        .lineLimit(1)
+                    Text("👥 \(grid.completedPlayerCount) \(grid.completedPlayerCount >= 2 ? "joueurs ont" : "joueur a") terminé cette grille")
+                    .font(.custom("Tahoma", size: 13))
+                    .foregroundStyle(.black.opacity(0.72))
+                    .lineLimit(1)
+                    .opacity(isUpcoming ? 0 : 1)
+                    .accessibilityHidden(isUpcoming)
                 } else {
                     Text(isLoading ? "Chargement..." : (message ?? "Aucune grille publiee"))
                         .font(.xpTahoma(size: 15, weight: .bold))
@@ -1284,11 +2307,15 @@ private struct PublishedGridCard: View {
                 .opacity(canGoToOlderGrid ? 1 : 0.45)
                 .disabled(!canGoToOlderGrid)
 
-                Button(playButtonTitle, action: playAction)
-                    .buttonStyle(XPButtonStyle())
-                    .frame(maxWidth: .infinity)
-                    .opacity(grid == nil || isLoadingRewardedAd ? 0.45 : 1)
-                    .disabled(grid == nil || isLoadingRewardedAd)
+                Button(action: playAction) {
+                    Text(playButtonTitle)
+                        .font(.xpTahoma(size: 13, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(XPButtonStyle())
+                .frame(maxWidth: .infinity)
+                .opacity(grid == nil || isUpcoming || isLoadingRewardedAd ? 0.45 : 1)
+                .disabled(grid == nil || isUpcoming || isLoadingRewardedAd)
 
                 Button(action: nextAction) {
                     Text(">")
@@ -1328,7 +2355,10 @@ private struct GridGameContent: View {
     @State private var timerTask: Task<Void, Never>?
     @State private var isCompleted = false
     @State private var completedAt: Date?
-
+    @State private var isKeyboardVisible = false
+    @State private var isShowingGridTutorial = false
+    @State private var canVerifyLetters = false
+    
     private var selectedWord: CrosswordWord? {
         isCompleted ? nil : grid.crosswordGrid?.word(id: selectedWordID)
     }
@@ -1348,7 +2378,18 @@ private struct GridGameContent: View {
 
     var body: some View {
         GeometryReader { proxy in
-            VStack(spacing: 12) {
+            let fullBoardHeight = (proxy.size.width - 28)
+                * CGFloat(CrosswordGrid.rowCount)
+                / CGFloat(CrosswordGrid.columnCount)
+            // Le bandeau de définition doit rester visible au-dessus du clavier.
+            // Seule la fenêtre qui découpe la grille rétrécit : son contenu garde
+            // sa taille et reste ancré en haut.
+            let keyboardBoardHeight = max(96, proxy.size.height - 152)
+            let boardViewportHeight = isKeyboardVisible
+                ? min(fullBoardHeight, keyboardBoardHeight)
+                : fullBoardHeight
+
+            VStack(spacing: 10) {
                 HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(grid.title)
@@ -1364,19 +2405,14 @@ private struct GridGameContent: View {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 8) {
-                    if !isCompleted {
-                        XPToolbarIconButton(systemName: "checkmark", accessibilityLabel: "Verifier la grille") {
-                            if verifyAnswers(), isGridFullyAnswered() {
-                                closeKeyboard()
-                                completeGrid()
-                            }
-                        }
+                    HStack(spacing: 8) {
+                        XPToolbarIconButton(
+                            systemName: "arrow.left",
+                            accessibilityLabel: "Quitter la grille",
+                            action: backAction
+                        )
                     }
-
-                    XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Quitter la grille", action: backAction)
                 }
-            }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.xpPanel)
@@ -1388,17 +2424,19 @@ private struct GridGameContent: View {
                     grid: crosswordGrid,
                     answers: $answers,
                     wrongCells: wrongCells,
-                    isKeyboardActive: !isCompleted && (selectedWord != nil || selectedCell != nil),
                     isReadOnly: isCompleted,
+                    isKeyboardVisible: isKeyboardVisible,
                     selectedWordID: $selectedWordID,
                     selectedCell: $selectedCell,
                     inputIndex: $inputIndex
                 )
-                .frame(maxHeight: .infinity)
-
-                if !isCompleted && selectedWord == nil && selectedCell == nil {
-                    GridToolsBar()
-                }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: boardViewportHeight,
+                    maxHeight: boardViewportHeight,
+                    alignment: .topLeading
+                )
+                .layoutPriority(1)
 
                 if isCompleted {
                     Text(completionStatusText)
@@ -1409,15 +2447,38 @@ private struct GridGameContent: View {
                         .padding(10)
                         .background(Color.xpPanel)
                         .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
-                } else if let selectedWord {
-                    Text((selectedWord.definitions.first ?? "DÉFINITION").uppercased())
-                        .font(.xpTahoma(size: 13, weight: .bold))
-                        .foregroundStyle(.black)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(Color.xpPanel)
-                        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                } else {
+                    HStack(spacing: 8) {
+                        if let selectedWord {
+                            Text((selectedWord.definitions.first ?? "DÉFINITION").uppercased())
+                                .font(.xpTahoma(size: 11, weight: .bold))
+                                .foregroundStyle(.black)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 5)
+                                .background(Color.xpPanel)
+                                .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                        } else {
+                            Spacer(minLength: 0)
+                        }
+
+                        GridToolsBar(
+                            canVerify: canVerifyLetters,
+                            canRevealLetter: selectedCell != nil,
+                            verifyAction: {
+                                canVerifyLetters = false
+
+                                if verifyAnswers(), isGridFullyAnswered() {
+                                    closeKeyboard()
+                                    completeGrid()
+                                }
+                            },
+                            revealLetterAction: revealSelectedLetter
+                        )
+                        .frame(width: 174)
+                    }
+                    .frame(height: 36)
                 }
 
                 if !isCompleted {
@@ -1447,13 +2508,31 @@ private struct GridGameContent: View {
 
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .overlay {
+            if isShowingGridTutorial {
+                GridTutorialOverlay {
+                    UserDefaults.standard.set(true, forKey: gridTutorialSeenKey)
+
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        isShowingGridTutorial = false
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
+        }
         .onAppear {
             loadSavedAnswers()
             loadSavedElapsedSeconds()
             loadCompletionState()
+
+            isShowingGridTutorial =
+                !UserDefaults.standard.bool(forKey: gridTutorialSeenKey)
+
             startTimer()
         }
         .onDisappear {
@@ -1463,6 +2542,16 @@ private struct GridGameContent: View {
         }
         .onChange(of: answers) { _, _ in
             saveAnswers()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) {
+                isKeyboardVisible = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.25)) {
+                isKeyboardVisible = false
+            }
         }
         }
     }
@@ -1481,6 +2570,9 @@ private struct GridGameContent: View {
 
     private var savedCompletionDateKey: String {
         userScopedStorageKey(prefix: "gridCompletedAt")
+    }
+    private var gridTutorialSeenKey: String {
+        "gridTutorialSeen.\(safeUserStorageKey)"
     }
 
     private var safeUserStorageKey: String {
@@ -1502,6 +2594,8 @@ private struct GridGameContent: View {
     private func typeLetter(_ letter: String) {
         let normalizedLetter = String(letter.uppercased().prefix(1))
         guard !normalizedLetter.isEmpty else { return }
+        
+        canVerifyLetters = true
 
         if let selectedWord {
             guard selectedWord.letterCoordinates.indices.contains(inputIndex) else { return }
@@ -1662,6 +2756,26 @@ private struct GridGameContent: View {
             }
         }
     }
+    
+    private func revealSelectedLetter() {
+        guard
+            !isCompleted,
+            let selectedCell,
+            let crosswordGrid = grid.crosswordGrid,
+            let correctLetter = crosswordGrid.correctLetter(at: selectedCell)
+        else {
+            return
+        }
+
+        answers[selectedCell] = correctLetter
+        wrongCells.remove(selectedCell)
+        canVerifyLetters = true
+
+        self.selectedCell = nil
+        inputIndex = 0
+
+        checkForCompletedGrid()
+    }
 
     private func erasePreviousLetter() {
         if let selectedWord {
@@ -1708,28 +2822,304 @@ private struct GridGameContent: View {
     }
 }
 
-private struct GridToolsBar: View {
+
+private struct TutorialBackArrowButton: View {
     var body: some View {
-        HStack(spacing: 8) {
-            Button("Index") {}
-                .buttonStyle(XPButtonStyle())
-                .disabled(true)
-                .opacity(0.45)
+        ZStack {
+            Rectangle()
+                .fill(Color.xpPanel)
 
-            Button("Lettre hasard") {}
-                .buttonStyle(XPButtonStyle())
-                .disabled(true)
-                .opacity(0.45)
-
-            Button("Choisir lettre") {}
-                .buttonStyle(XPButtonStyle())
-                .disabled(true)
-                .opacity(0.45)
+            Image(systemName: "arrow.left")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(.black)
         }
-        .frame(maxWidth: .infinity)
-        .padding(10)
+        .frame(width: 38, height: 38)
+        .overlay(
+            Rectangle()
+                .stroke(
+                    Color(red: 0.5, green: 0.62, blue: 0.73),
+                    lineWidth: 2
+                )
+        )
+    }
+}
+
+
+
+private struct GridTutorialOverlay: View {
+    let dismissAction: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black.opacity(0.82)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+
+                    // Bouton retour en haut à droite
+                    HStack {
+                        Spacer()
+
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .trailing, spacing: 3) {
+                                Text("Retour à l’écran")
+                                Text("d’accueil")
+                            }
+                            .font(.xpTahoma(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.trailing)
+
+                            TutorialBackArrowButton()
+                        }
+                    }
+                    .padding(.top, 18)
+                    .padding(.trailing, 16)
+
+                    Spacer(minLength: 30)
+
+                    // Explication des deux types de sélection
+                    VStack(spacing: 24) {
+                        HStack(spacing: 14) {
+                            
+                            TutorialDefinitionCell()
+                                .frame(width: 64, height: 64)
+
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("Sélectionner\nle mot entier")
+                                .font(.xpTahoma(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.leading)
+                        }
+
+                        HStack(spacing: 14) {
+                            TutorialLetterCell()
+                                .frame(width: 64, height: 64)
+
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("Sélectionner\nla case seule")
+                                .font(.xpTahoma(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+
+                    Spacer()
+
+                    // Explication des boutons du bas
+                    HStack(alignment: .bottom, spacing: 8) {
+                        TutorialBottomAction(
+                            icon: "list.bullet",
+                            text: "Afficher\nl’index"
+                        )
+
+                        TutorialBottomAction(
+                            icon: "checkmark",
+                            text: "Vérifier les\nlettres présentes"
+                        )
+
+                        TutorialBottomAction(
+                            letter: "A",
+                            text: "Révéler la lettre\nsélectionnée"
+                        )
+                    }
+                    .padding(.horizontal, 10)
+
+                    Text("Touchez l’écran pour commencer")
+                        .font(.xpTahoma(size: 13, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .padding(.top, 22)
+                        .padding(.bottom, 16)
+                }
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                dismissAction()
+            }
+        }
+    }
+}
+
+private struct TutorialDefinitionCell: View {
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(
+                    Color(
+                        red: 193 / 255,
+                        green: 174 / 255,
+                        blue: 238 / 255
+                    )
+                )
+
+            Text("CAPITALE\nDE L’ITALIE")
+                .font(.xpTahoma(size: 7, weight: .bold))
+                .foregroundStyle(.black)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+                .padding(3)
+
+
+        }
+        .overlay(
+            Rectangle()
+                .stroke(.white, lineWidth: 4)
+        )
+        .shadow(color: .white.opacity(0.8), radius: 10)
+    }
+}
+
+private struct TutorialLetterCell: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.white)
+            .overlay(
+                Rectangle()
+                    .stroke(.white, lineWidth: 4)
+            )
+            .shadow(color: .white.opacity(0.8), radius: 10)
+    }
+}
+
+private struct TutorialBottomAction: View {
+    var icon: String?
+    var letter: String?
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 7) {
+            ZStack {
+                Rectangle()
+                    .fill(Color.xpPanel)
+
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+
+                if let letter {
+                    Text(letter)
+                        .font(.xpTahoma(size: 19, weight: .bold))
+                        .foregroundStyle(.black)
+                }
+            }
+            .frame(width: 50, height: 38)
+            .overlay(
+                Rectangle()
+                    .stroke(
+                        Color(red: 0.5, green: 0.62, blue: 0.73),
+                        lineWidth: 2
+                    )
+            )
+
+            Image(systemName: "arrow.down")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text(text)
+                .font(.xpTahoma(size: 10.5, weight: .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
+        }
+        .frame(maxWidth: .infinity, alignment: .top)
+    }
+}
+
+    private struct GridToolsBar: View {
+        let canVerify: Bool
+        let canRevealLetter: Bool
+    let verifyAction: () -> Void
+    let revealLetterAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            GridToolButton(
+                title: "Index",
+                systemImage: "list.bullet",
+                letter: nil,
+                action: {},
+                isEnabled: false
+            )
+
+            GridToolButton(
+                title: "Vérifier",
+                systemImage: "checkmark",
+                letter: nil,
+                action: verifyAction,
+                isEnabled: canVerify
+            )
+
+            GridToolButton(
+                title: "Révéler",
+                systemImage: nil,
+                letter: "A",
+                action: revealLetterAction,
+                isEnabled: canRevealLetter
+            )
+        }
+    }
+}
+
+private struct GridToolButton: View {
+    let title: String?
+    let systemImage: String?
+    let letter: String?
+    let action: () -> Void
+    var isEnabled = true
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 14, weight: .bold))
+                }
+
+                if let letter {
+                    Text(letter)
+                        .font(.xpTahoma(size: 14, weight: .bold))
+                }
+
+                if let title {
+                    Text(title)
+                        .font(.xpTahoma(size: 8.5, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                }
+            }
+            .foregroundStyle(.black.opacity(isEnabled ? 0.78 : 0.35))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.xpPanel)
-        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+        .overlay(
+            Rectangle()
+                .stroke(
+                    Color(red: 0.5, green: 0.62, blue: 0.73)
+                        .opacity(isEnabled ? 1 : 0.5),
+                    lineWidth: 2
+                )
+        )
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.55)
     }
 }
 
@@ -1737,178 +3127,116 @@ private struct CrosswordBoardViewport: View {
     let grid: CrosswordGrid
     @Binding var answers: [GridCoordinate: String]
     let wrongCells: Set<GridCoordinate>
-    let isKeyboardActive: Bool
     let isReadOnly: Bool
+    let isKeyboardVisible: Bool
     @Binding var selectedWordID: String?
     @Binding var selectedCell: GridCoordinate?
     @Binding var inputIndex: Int
 
-    @State private var scale: CGFloat = 0.82
-    @State private var lastScale: CGFloat = 0.82
-    @State private var offset: CGSize = .zero
-    @State private var dragStartOffset: CGSize?
-
     private let cellSize: CGFloat = 38
+    private var rowToCenter: Int? {
+        guard isKeyboardVisible else { return nil }
 
+        if let selectedWordID,
+           let word = grid.word(id: selectedWordID) {
+
+            let rows = word.letterCoordinates.map(\.row)
+
+            guard let firstRow = rows.min(),
+                  let lastRow = rows.max() else {
+                return selectedCell?.row
+            }
+
+            let isVertical = word.direction.rowDelta != 0
+
+            if isVertical {
+                let wordHeight = lastRow - firstRow + 1
+
+                // Le clavier permet d'afficher environ 9 lignes.
+                // Si le mot tient dedans, on centre le milieu du mot.
+                if wordHeight <= 9 {
+                    return (firstRow + lastRow) / 2
+                }
+
+                // Pour un mot de plus de 9 lettres, on centre plutôt
+                // la case actuellement sélectionnée.
+                return selectedCell?.row ?? ((firstRow + lastRow) / 2)
+            }
+
+            // Pour un mot horizontal, toutes les lettres sont sur la même ligne.
+            return firstRow
+        }
+
+        // Clic sur une case qui n'appartient pas à un mot sélectionné.
+        return selectedCell?.row
+    }
     var body: some View {
         GeometryReader { proxy in
-            ZStack {
-                Color.xpPanel
+            let boardWidth = CGFloat(CrosswordGrid.columnCount) * cellSize
+            let boardHeight = CGFloat(CrosswordGrid.rowCount) * cellSize
+            let scale = proxy.size.width / boardWidth
 
-                CrosswordBoard(
-                    grid: grid,
-                    cellSize: cellSize,
-                    answers: $answers,
-                    wrongCells: wrongCells,
-                    isReadOnly: isReadOnly,
-                    selectedWordID: $selectedWordID,
-                    selectedCell: $selectedCell,
-                    inputIndex: $inputIndex
-                )
-                .frame(
-                    width: CGFloat(CrosswordGrid.columnCount) * cellSize,
-                    height: CGFloat(CrosswordGrid.rowCount) * cellSize
-                )
-                .scaleEffect(scale)
-                .offset(offset)
-                .gesture(boardGesture(in: proxy.size))
-            }
-            .clipped()
-            .overlay(Rectangle().stroke(Color.black.opacity(0.45), lineWidth: 1))
-            .onAppear {
-                configureInitialScale(in: proxy.size)
-            }
-            .onChange(of: selectedWordID) { _, _ in
-                updateSelectionViewport(in: proxy.size)
-            }
-            .onChange(of: selectedCell) { _, _ in
-                updateSelectionViewport(in: proxy.size)
-            }
-            .onChange(of: proxy.size) { _, newSize in
-                if selectedWordID == nil && selectedCell == nil {
-                    configureInitialScale(in: newSize)
-                } else {
-                    focusSelection(in: newSize)
+            ScrollViewReader { scrollProxy in
+                ScrollView(.vertical) {
+                    ZStack(alignment: .topLeading) {
+                        CrosswordBoard(
+                            grid: grid,
+                            cellSize: cellSize,
+                            answers: $answers,
+                            wrongCells: wrongCells,
+                            isReadOnly: isReadOnly,
+                            selectedWordID: $selectedWordID,
+                            selectedCell: $selectedCell,
+                            inputIndex: $inputIndex
+                        )
+                        .frame(
+                            width: boardWidth,
+                            height: boardHeight
+                        )
+                        .scaleEffect(scale, anchor: .topLeading)
+                        .frame(
+                            width: boardWidth * scale,
+                            height: boardHeight * scale,
+                            alignment: .topLeading
+                        )
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .overlay(Rectangle().stroke(Color.black.opacity(0.45), lineWidth: 1))
+                .onChange(of: rowToCenter) { _, newRow in
+                    guard let newRow else { return }
+
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(260))
+
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            scrollProxy.scrollTo(newRow, anchor: .center)
+                        }
+                    }
+                }
+                .onChange(of: isKeyboardVisible) { _, visible in
+                    guard visible, let rowToCenter else { return }
+
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(260))
+
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            scrollProxy.scrollTo(rowToCenter, anchor: .center)
+                        }
+                    }
                 }
             }
         }
         .background(Color.xpPanel)
         .clipShape(Rectangle())
-        .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
-    }
-
-    private func boardGesture(in size: CGSize) -> some Gesture {
-        let drag = DragGesture()
-            .onChanged { value in
-                let start = dragStartOffset ?? offset
-                dragStartOffset = start
-                offset = clampedOffset(
-                    CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height),
-                    scale: scale,
-                    viewport: effectiveViewport(for: size)
+        .overlay(
+            Rectangle()
+                .stroke(
+                    Color(red: 0.5, green: 0.62, blue: 0.73),
+                    lineWidth: 2
                 )
-            }
-            .onEnded { _ in
-                dragStartOffset = nil
-                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
-            }
-
-        let magnify = MagnificationGesture()
-            .onChanged { value in
-                scale = min(max(lastScale * value, minimumScale(in: size)), 1.55)
-                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
-            }
-            .onEnded { _ in
-                lastScale = scale
-                offset = clampedOffset(offset, scale: scale, viewport: effectiveViewport(for: size))
-            }
-
-        return drag.simultaneously(with: magnify)
-    }
-
-    private func configureInitialScale(in size: CGSize) {
-        let fitWidth = max(size.width - 28, 0) / (CGFloat(CrosswordGrid.columnCount) * cellSize)
-        let fitHeight = max(size.height - 28, 0) / (CGFloat(CrosswordGrid.rowCount) * cellSize)
-        let fittedScale = min(fitWidth, fitHeight)
-        let initialScale = min(max(fittedScale, minimumScale(in: size)), 1.0)
-        scale = initialScale
-        lastScale = initialScale
-        offset = .zero
-    }
-
-    private func updateSelectionViewport(in size: CGSize) {
-        if selectedWordID == nil && selectedCell == nil {
-            configureInitialScale(in: size)
-        } else {
-            focusSelection(in: size)
-        }
-    }
-
-    private func focusSelection(in size: CGSize) {
-        guard size.width > 0, size.height > 0 else { return }
-
-        let viewport = effectiveViewport(for: size)
-
-        if let word = grid.word(id: selectedWordID) {
-            focus(coordinates: word.letterCoordinates, isVertical: word.direction.rowDelta != 0, viewport: viewport)
-        } else if let selectedCell {
-            focus(coordinates: [selectedCell], isVertical: false, viewport: viewport)
-        }
-    }
-
-    private func focus(coordinates: [GridCoordinate], isVertical: Bool, viewport: CGSize) {
-        guard let firstRow = coordinates.map(\.row).min(),
-              let lastRow = coordinates.map(\.row).max(),
-              let firstColumn = coordinates.map(\.column).min(),
-              let lastColumn = coordinates.map(\.column).max() else {
-            return
-        }
-
-        let spanColumns = CGFloat(lastColumn - firstColumn + 1)
-        let spanRows = CGFloat(lastRow - firstRow + 1)
-        let desiredScale: CGFloat
-
-        if isVertical {
-            desiredScale = (viewport.height * 0.86) / max(spanRows * cellSize, cellSize)
-        } else {
-            desiredScale = (viewport.width * 0.86) / max(spanColumns * cellSize, cellSize)
-        }
-
-        let newScale = min(max(desiredScale, minimumScale(in: viewport)), 1.55)
-        let boardWidth = CGFloat(CrosswordGrid.columnCount) * cellSize
-        let boardHeight = CGFloat(CrosswordGrid.rowCount) * cellSize
-        let centerColumn = (CGFloat(firstColumn + lastColumn) + 1) / 2
-        let centerRow = (CGFloat(firstRow + lastRow) + 1) / 2
-        let proposedOffset = CGSize(
-            width: -((centerColumn * cellSize) - boardWidth / 2) * newScale,
-            height: -((centerRow * cellSize) - boardHeight / 2) * newScale
-        )
-
-        scale = newScale
-        lastScale = newScale
-        offset = clampedOffset(proposedOffset, scale: newScale, viewport: viewport)
-    }
-
-    private func effectiveViewport(for size: CGSize) -> CGSize {
-        guard isKeyboardActive else { return size }
-        return CGSize(width: size.width, height: max(size.height - 310, 180))
-    }
-
-    private func minimumScale(in size: CGSize) -> CGFloat {
-        let fitWidth = max(size.width - 28, 0) / (CGFloat(CrosswordGrid.columnCount) * cellSize)
-        let fitHeight = max(size.height - 28, 0) / (CGFloat(CrosswordGrid.rowCount) * cellSize)
-        return min(max(min(fitWidth, fitHeight) * 0.82, 0.58), 0.9)
-    }
-
-    private func clampedOffset(_ proposed: CGSize, scale: CGFloat, viewport: CGSize) -> CGSize {
-        let boardWidth = CGFloat(CrosswordGrid.columnCount) * cellSize * scale
-        let boardHeight = CGFloat(CrosswordGrid.rowCount) * cellSize * scale
-        let maxX = max((boardWidth - viewport.width) / 2, 0)
-        let maxY = max((boardHeight - viewport.height) / 2 + (isKeyboardActive ? 90 : 16), 0)
-
-        return CGSize(
-            width: min(max(proposed.width, -maxX), maxX),
-            height: min(max(proposed.height, -maxY), maxY)
         )
     }
 }
@@ -1942,6 +3270,7 @@ private struct CrosswordBoard: View {
                 HStack(spacing: 0) {
                     ForEach(0..<CrosswordGrid.columnCount, id: \.self) { column in
                         let coordinate = GridCoordinate(row: row, column: column)
+
                         CrosswordCell(
                             coordinate: coordinate,
                             definitionWords: grid.definitionCells[coordinate] ?? [],
@@ -1957,6 +3286,8 @@ private struct CrosswordBoard: View {
                         )
                     }
                 }
+                .id(row)
+                .zIndex(Double(CrosswordGrid.rowCount - row))
             }
         }
         .background(Color.white)
@@ -2012,6 +3343,7 @@ private struct CrosswordCell: View {
                     ForEach(definitionWords) { word in
                         DefinitionCellSegment(
                             word: word,
+                            segmentCount: definitionWords.count,
                             isSelected: !isReadOnly && word.id == selectedWordID,
                             isReadOnly: isReadOnly
                         ) {
@@ -2032,6 +3364,7 @@ private struct CrosswordCell: View {
             }
         }
         .frame(width: cellSize, height: cellSize)
+        .zIndex(isDefinition ? 2 : 0)
         .overlay(Rectangle().stroke(Color.black.opacity(0.72), lineWidth: 0.8))
     }
 
@@ -2041,7 +3374,7 @@ private struct CrosswordCell: View {
         }
 
         if isDefinition {
-            return Color(red: 1.0, green: 0.95, blue: 0.72)
+            return Color(red: 193 / 255, green: 174 / 255, blue: 238 / 255)
         }
 
         if isWrong {
@@ -2054,6 +3387,7 @@ private struct CrosswordCell: View {
 
 private struct DefinitionCellSegment: View {
     let word: CrosswordWord
+    let segmentCount: Int
     let isSelected: Bool
     let isReadOnly: Bool
     let action: () -> Void
@@ -2065,25 +3399,160 @@ private struct DefinitionCellSegment: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 1) {
+            ZStack {
                 Text(definitionText)
-                    .font(.xpTahoma(size: 6.5, weight: .bold))
-                    .foregroundStyle(.black.opacity(0.82))
+                    .font(.xpTahoma(size: segmentCount > 1 ? 5.5 : 6.4, weight: .bold))
+                    .foregroundStyle(.black)
                     .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.55)
+                    .lineLimit(segmentCount > 1 ? 3 : 4)
+                    .minimumScaleFactor(0.42)
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 3)
 
-                Text(word.arrowSymbol)
-                    .font(.xpTahoma(size: 10, weight: .bold))
-                    .foregroundStyle(Color(red: 0.0, green: 0.2, blue: 0.75))
+                DefinitionArrowView(style: word.arrowStyle)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74) : Color.clear)
+            .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74).opacity(0.72) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isReadOnly)
         .overlay(Rectangle().stroke(Color.black.opacity(isSelected ? 0.55 : 0.18), lineWidth: isSelected ? 1 : 0.5))
+    }
+}
+
+private struct DefinitionArrowView: View {
+    let style: DefinitionArrowStyle
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+
+            let arrowSize = width * 0.14
+            let lineWidth: CGFloat = 1.1
+
+            ZStack {
+
+                // ===== Traits =====
+
+                Path { path in
+                    switch style {
+
+                    case .right:
+                        let y = height * 0.5
+                        let startX = width
+                        let tipX = width + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: startX, y: y))
+                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y))
+
+                    case .down:
+                        let x = width * 0.5
+                        let startY = height
+                        let tipY = height + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: x, y: startY))
+                        path.addLine(to: CGPoint(x: x, y: tipY - arrowSize))
+
+                    case .cornerDownRight:
+                        let startX = width
+                        let startY = height * 0.5
+
+                        let elbowX = startX + arrowSize * 1
+                        let elbowY = startY
+
+                        let tipX = elbowX
+                        let tipY = elbowY + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: startX, y: elbowY))
+                        path.addLine(to: CGPoint(x: elbowX, y: elbowY))
+                        path.addLine(to: CGPoint(x: elbowX, y: tipY - arrowSize))
+
+                    case .cornerRightDown:
+                        let startX = width * 0.5
+                        let startY = height
+
+                        let elbowX = startX
+                        let elbowY = startY + arrowSize * 1
+
+                        let tipX = elbowX + arrowSize * 1.6
+                        let tipY = elbowY
+
+                        path.move(to: CGPoint(x: startX, y: startY))
+                        path.addLine(to: CGPoint(x: elbowX, y: elbowY))
+                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: tipY))
+                    }
+                }
+                .stroke(
+                    Color.black,
+                    style: StrokeStyle(
+                        lineWidth: lineWidth,
+                        lineCap: .round,
+                        lineJoin: .round
+                    )
+                )
+
+                // ===== Pointes pleines =====
+
+                Path { path in
+                    switch style {
+
+                    case .right:
+                        let y = height * 0.5
+                        let tipX = width + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: tipX, y: y))
+                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y - arrowSize * 0.45))
+                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y + arrowSize * 0.45))
+                        path.closeSubpath()
+                    case .down:
+                        let x = width * 0.5
+                        let tipY = height + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: x, y: tipY))
+                        path.addLine(to: CGPoint(x: x - arrowSize * 0.45, y: tipY - arrowSize))
+                        path.addLine(to: CGPoint(x: x + arrowSize * 0.45, y: tipY - arrowSize))
+                        path.closeSubpath()
+
+                    case .cornerDownRight:
+                        let elbowX = width + arrowSize * 1
+
+                        let elbowY = height * 0.5
+
+                        let tipY = elbowY + arrowSize * 1.6
+
+                        path.move(to: CGPoint(x: elbowX, y: tipY))
+                        path.addLine(to: CGPoint(x: elbowX - arrowSize * 0.45, y: tipY - arrowSize))
+                        path.addLine(to: CGPoint(x: elbowX + arrowSize * 0.45, y: tipY - arrowSize))
+                        path.closeSubpath()
+
+                    case .cornerRightDown:
+                        let startX = width * 0.5
+                        let startY = height
+
+                        let elbowX = startX
+                        let elbowY = startY + arrowSize * 1
+
+                        let tipX = elbowX + arrowSize * 1.6
+                        let tipY = elbowY
+
+                        path.move(to: CGPoint(x: tipX, y: tipY))
+                        path.addLine(to: CGPoint(
+                            x: tipX - arrowSize,
+                            y: tipY - arrowSize * 0.45
+                        ))
+                        path.addLine(to: CGPoint(
+                            x: tipX - arrowSize,
+                            y: tipY + arrowSize * 0.45
+                        ))
+                        path.closeSubpath()
+                    }
+                }
+                .fill(Color.black)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

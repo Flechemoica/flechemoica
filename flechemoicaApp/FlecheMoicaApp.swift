@@ -1,6 +1,7 @@
 import FirebaseCore
 import GoogleSignIn
 import SwiftUI
+import UserNotifications
 
 #if canImport(FirebaseAppCheck)
 import FirebaseAppCheck
@@ -39,6 +40,13 @@ struct FlecheMoicaApp: App {
 
         FirebaseConfiguration.shared.setLoggerLevel(.min)
         FirebaseApp.configure()
+        Task {
+            do {
+                try await UNUserNotificationCenter.current().setBadgeCount(0)
+            } catch {
+                print("Impossible de supprimer le badge :", error)
+            }
+        }
 
         #if canImport(FirebaseAnalytics)
         Analytics.logEvent("app_started", parameters: nil)
@@ -51,6 +59,7 @@ struct FlecheMoicaApp: App {
             MobileAds.shared.start(completionHandler: nil)
         }
         #endif
+
     }
 
     var body: some Scene {

@@ -20,6 +20,7 @@ final class PushNotificationManager: NSObject {
     private let allUsersTopic = "all_users"
     private var currentUserID: String?
     private var configuredUserIDs = Set<String>()
+    private var messagingConfiguredUserIDs = Set<String>()
     private var pendingWeeklyGridID: String?
 
     private override init() {
@@ -37,7 +38,7 @@ final class PushNotificationManager: NSObject {
     func configureForAuthenticatedUser(userID: String) {
         currentUserID = userID
         guard !configuredUserIDs.contains(userID) else {
-            refreshFCMToken()
+            configureFirebaseMessagingIfAPNSIsReady()
             return
         }
 
@@ -45,9 +46,12 @@ final class PushNotificationManager: NSObject {
 
         Task {
             await requestAuthorizationAndRegister()
-            subscribeToNotificationTopics()
-            refreshFCMToken()
+            configureFirebaseMessagingIfAPNSIsReady()
         }
+    }
+
+    fileprivate func didReceiveAPNSToken() {
+        configureFirebaseMessagingIfAPNSIsReady()
     }
 
     @MainActor
@@ -84,6 +88,20 @@ final class PushNotificationManager: NSObject {
         #if canImport(FirebaseMessaging)
         Messaging.messaging().subscribe(toTopic: weeklyGridsTopic) { _ in }
         Messaging.messaging().subscribe(toTopic: allUsersTopic) { _ in }
+        #endif
+    }
+
+    private func configureFirebaseMessagingIfAPNSIsReady() {
+        #if canImport(FirebaseMessaging)
+        guard Messaging.messaging().apnsToken != nil,
+              let userID = currentUserID,
+              !messagingConfiguredUserIDs.contains(userID) else {
+            return
+        }
+
+        messagingConfiguredUserIDs.insert(userID)
+        subscribeToNotificationTopics()
+        refreshFCMToken()
         #endif
     }
 
@@ -177,6 +195,7 @@ final class FlecheMoicaPushAppDelegate: NSObject, UIApplicationDelegate {
     ) {
         #if canImport(FirebaseMessaging)
         Messaging.messaging().apnsToken = deviceToken
+        PushNotificationManager.shared.didReceiveAPNSToken()
         #endif
     }
 }

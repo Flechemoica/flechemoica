@@ -189,14 +189,50 @@ struct AccountSetupView: View {
 
     private var canSubmit: Bool {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasValidCredentials = trimmedEmail.contains("@") && password.count >= 6
+        let hasCredentials = trimmedEmail.contains("@") && !password.isEmpty
 
         switch authMode {
         case .signUp:
-            return hasValidCredentials && !pseudo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return hasCredentials
+                && !pseudo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
         case .signIn:
-            return hasValidCredentials
+            return hasCredentials
         }
+    }
+
+    private var passwordRequirementsMessage: String? {
+        guard authMode == .signUp else {
+            return nil
+        }
+
+        var missingRequirements: [String] = []
+
+        if password.count < 10 {
+            missingRequirements.append("au moins 10 caractères")
+        }
+
+        if !password.contains(where: { $0.isNumber }) {
+            missingRequirements.append("au moins un chiffre")
+        }
+
+        let specialCharacters = CharacterSet.alphanumerics
+            .union(.whitespacesAndNewlines)
+            .inverted
+
+        if password.unicodeScalars.allSatisfy({
+            !specialCharacters.contains($0)
+        }) {
+            missingRequirements.append("au moins un caractère spécial")
+        }
+
+        guard !missingRequirements.isEmpty else {
+            return nil
+        }
+
+        return "Le mot de passe doit contenir "
+            + missingRequirements.joined(separator: ", ")
+            + ". Réessaie."
     }
 
     private var selectedAvatarName: String {
@@ -227,6 +263,11 @@ struct AccountSetupView: View {
     }
 
     private func submitTapped() {
+        if let passwordRequirementsMessage {
+            statusText = passwordRequirementsMessage
+            return
+        }
+
         isSubmitting = true
         statusText = authMode == .signUp ? "Création du compte..." : "Connexion..."
 
@@ -597,7 +638,7 @@ struct AccountSetupView: View {
         case .networkError:
             return "Problème réseau. Réessaie."
         case .weakPassword:
-            return "Mot de passe trop faible."
+            return "Le mot de passe ne respecte pas les règles de sécurité. Il doit contenir au moins 10 caractères, un chiffre et un caractère spécial. Réessaie."
         default:
             return nsError.localizedDescription
         }
