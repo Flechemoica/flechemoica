@@ -10,10 +10,11 @@
 		020732632FFED28900721498 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 020732622FFED28900721498 /* FirebaseAuth */; };
 		020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 020732672FFEED2E00721498 /* FirebaseFirestore */; };
 		020732712FFEFCBB00721498 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 020732702FFEFCBB00721498 /* GoogleMobileAds */; };
-		025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 025C8937300811370021E547 /* FirebaseAnalytics */; };
+		025C8938300811370021E547 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = 025C8937300811370021E547 /* FirebaseAnalyticsIdentitySupport */; };
 		025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894030086EBC0021E547 /* GoogleSignIn */; };
 		025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894230086EBC0021E547 /* GoogleSignInSwift */; };
 		0261879D3009667A00717A18 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 0261879C3009667A00717A18 /* FirebaseMessaging */; };
+		028364C83009DE7900DF728B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 028364C73009DE7900DF728B /* FirebaseStorage */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,11 +40,6 @@
 			path = flechemoica;
 			sourceTree = "<group>";
 		};
-		02A66F6D30090D41004CBB46 /* docs */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = docs;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -55,7 +51,8 @@
 				0261879D3009667A00717A18 /* FirebaseMessaging in Frameworks */,
 				020732632FFED28900721498 /* FirebaseAuth in Frameworks */,
 				025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */,
-				025C8938300811370021E547 /* FirebaseAnalytics in Frameworks */,
+				028364C83009DE7900DF728B /* FirebaseStorage in Frameworks */,
+				025C8938300811370021E547 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */,
 			);
 		};
@@ -65,7 +62,6 @@
 		000000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				02A66F6D30090D41004CBB46 /* docs */,
 				000000000000000000000010 /* flechemoica */,
 				020732662FFEED2E00721498 /* Frameworks */,
 				000000000000000000000020 /* Products */,
@@ -102,17 +98,17 @@
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* flechemoica */,
-				02A66F6D30090D41004CBB46 /* docs */,
 			);
 			name = flechemoica;
 			packageProductDependencies = (
 				020732622FFED28900721498 /* FirebaseAuth */,
 				020732672FFEED2E00721498 /* FirebaseFirestore */,
 				020732702FFEFCBB00721498 /* GoogleMobileAds */,
-				025C8937300811370021E547 /* FirebaseAnalytics */,
+				025C8937300811370021E547 /* FirebaseAnalyticsIdentitySupport */,
 				025C894030086EBC0021E547 /* GoogleSignIn */,
 				025C894230086EBC0021E547 /* GoogleSignInSwift */,
 				0261879C3009667A00717A18 /* FirebaseMessaging */,
+				028364C73009DE7900DF728B /* FirebaseStorage */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* flechemoica.app */;
@@ -211,6 +207,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = SLHK6U4Z84;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -281,6 +278,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = SLHK6U4Z84;
 				DRIVERKIT_DEPLOYMENT_TARGET = 27.0;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -314,15 +312,15 @@
 				CODE_SIGN_ENTITLEMENTS = flechemoica/flechemoica.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = SLHK6U4Z84;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation nous aide à afficher des publicités plus pertinentes.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation permet de mesurer les affichages, les clics et les visiteurs uniques des publicités, et d’afficher des annonces plus pertinentes.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -362,15 +360,15 @@
 				CODE_SIGN_ENTITLEMENTS = flechemoica/flechemoica.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 5;
-				DEVELOPMENT_TEAM = SLHK6U4Z84;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = flechemoica/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Flèche-moi ça";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.word-games";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation nous aide à afficher des publicités plus pertinentes.";
+				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Cette autorisation permet de mesurer les affichages, les clics et les visiteurs uniques des publicités, et d’afficher des annonces plus pertinentes.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -466,10 +464,10 @@
 			package = 0207326F2FFEFCBB00721498 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
 			productName = GoogleMobileAds;
 		};
-		025C8937300811370021E547 /* FirebaseAnalytics */ = {
+		025C8937300811370021E547 /* FirebaseAnalyticsIdentitySupport */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAnalytics;
+			productName = FirebaseAnalyticsIdentitySupport;
 		};
 		025C894030086EBC0021E547 /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -485,6 +483,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		028364C73009DE7900DF728B /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
