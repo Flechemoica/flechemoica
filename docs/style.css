@@ -399,6 +399,18 @@ body {
 .legal-card h2 {
     text-align: center;
 }
+.legal-card ul {
+    margin: 0 0 20px 0;
+    padding-left: 30px;
+}
+
+.legal-card p {
+    margin: 0 0 20px 0;
+}
+
+.legal-card li {
+    margin-bottom: 6px;
+}
 .separator-right::after {
   content: "";
   position: absolute;
