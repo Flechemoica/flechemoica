@@ -9,17 +9,12 @@ import SwiftUI
 import UIKit
 import WebKit
 
-#if canImport(GoogleMobileAds)
-import GoogleMobileAds
-#endif
-
 struct HomeView: View {
     let user: User
     var onUserChanged: (User) -> Void = { _ in }
     var onSignedOut: () -> Void = {}
 
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var rewardedGridAccessAd = RewardedGridAccessAd()
     @State private var isEditor = false
     @State private var isShowingPublicProfile = false
     @State private var isShowingSettings = false
@@ -30,7 +25,6 @@ struct HomeView: View {
     @State private var selectedPublicProfile: PublicProfile?
     @State private var isLoadingPublicProfiles = false
     @State private var profileListMessage: String?
-    @State private var rewardUnlockedGridIDs: Set<String> = []
     @State private var completedGridTitles: [String] = []
     @State private var gridAccessMessage: String?
     @State private var isLoadingPublishedGrids = false
@@ -46,8 +40,6 @@ struct HomeView: View {
     @State private var answeredPollCommunicationIDs: Set<String> = []
     @State private var homeCommunicationConfigListener: ListenerRegistration?
     @State private var homeCommunicationsListener: ListenerRegistration?
-    @State private var adPlacementConfig = AdPlacementConfig()
-    @State private var adPlacementConfigListener: ListenerRegistration?
 
     private var displayName: String {
         if let displayNameOverride, !displayNameOverride.isEmpty {
@@ -142,7 +134,6 @@ struct HomeView: View {
                 return [.admobCommunication]
             }
 
-            // Un sondage reste affiché après le vote au lieu d'être remplacé par AdMob.
             return [communication]
         }
 
@@ -220,15 +211,12 @@ struct HomeView: View {
                             gridCount: publishedGrids.count,
                             isLoadingPublishedGrids: isLoadingPublishedGrids,
                             gridLoadingMessage: gridLoadingMessage,
-                            gridAccessMessage: gridAccessMessage ?? rewardedGridAccessAd.message,
-                            isLoadingRewardedAd: rewardedGridAccessAd.isLoading,
-                            requiresRewardedAd: selectedGridRequiresRewardedAd,
+                            gridAccessMessage: gridAccessMessage,
                             selectedGridIsCompleted: selectedGridIsCompleted,
                             selectedGridIsUpcoming: selectedGridIsUpcoming,
                             selectedGridIsCurrent: selectedGridIsCurrent,
                             communicationConfig: homeCommunicationConfig,
                             activeCommunications: activeHomeCommunications,
-                            adPlacementConfig: adPlacementConfig,
                             pollVoteAction: voteInPoll,
                             profileAction: openOwnProfile,
                             previousGridAction: showPreviousGrid,
@@ -318,10 +306,6 @@ struct HomeView: View {
                 photoURLOverride = URL(string: "flechemoica-avatar://\(avatarID)")
             }
 
-            if let unlockedGridIDs = userData?["unlockedGridIDs"] as? [String] {
-                rewardUnlockedGridIDs = Set(unlockedGridIDs)
-            }
-
             await syncAuthenticatedEmailIfNeeded(
                 refreshedUser: refreshedUser,
                 document: document,
@@ -377,10 +361,6 @@ struct HomeView: View {
         }
 
         return publishedGrids[selectedGridIndex]
-    }
-
-    private var selectedGridRequiresRewardedAd: Bool {
-        false
     }
 
     private var selectedGridIsCompleted: Bool {
@@ -522,30 +502,13 @@ struct HomeView: View {
                 }
         }
 
-        if adPlacementConfigListener == nil {
-            adPlacementConfigListener = database
-                .collection("appConfiguration")
-                .document("adPlacements")
-                .addSnapshotListener { snapshot, error in
-                    Task { @MainActor in
-                        if let error {
-                            print("Ad placement config listener failed: \(error.localizedDescription)")
-                            return
-                        }
-
-                        adPlacementConfig = AdPlacementConfig(snapshot: snapshot)
-                    }
-                }
-        }
     }
 
     private func stopHomeCommunicationListeners() {
         homeCommunicationConfigListener?.remove()
         homeCommunicationsListener?.remove()
-        adPlacementConfigListener?.remove()
         homeCommunicationConfigListener = nil
         homeCommunicationsListener = nil
-        adPlacementConfigListener = nil
     }
 
     private func refreshAnsweredActivePoll() async {
@@ -695,22 +658,6 @@ struct HomeView: View {
         }
     }
 
-    private func persistUnlockedGrid(id: String) {
-        Task {
-            do {
-                try await Firestore.firestore()
-                    .collection("users")
-                    .document(user.uid)
-                    .setData([
-                        "unlockedGridIDs": FieldValue.arrayUnion([id]),
-                        "updatedAt": FieldValue.serverTimestamp()
-                    ], merge: true)
-            } catch {
-                gridAccessMessage = "Grille debloquee sur cet appareil, mais synchronisation impossible."
-            }
-        }
-    }
-
     private func loadPublicProfiles() async {
         isLoadingPublicProfiles = true
         profileListMessage = nil
@@ -813,153 +760,6 @@ struct HomeView: View {
 
     private func handleSignedOut() {
         onSignedOut()
-    }
-}
-
-@MainActor
-private final class RewardedGridAccessAd: NSObject, ObservableObject {
-    @Published private(set) var isLoading = false
-    @Published private(set) var message: String?
-
-    #if canImport(GoogleMobileAds)
-    private var rewardedAd: RewardedAd?
-    private var pendingRewardCompletion: ((Bool) -> Void)?
-    private var didEarnReward = false
-    private var statsUserID: String?
-
-    private var effectiveAdUnitID: String {
-        AdMobConfiguration.rewardedAdUnitID(productionID: productionAdUnitID ?? "")
-    }
-
-    private var productionAdUnitID: String?
-    #endif
-
-    func showAd(
-        adUnitID: String,
-        userID: String,
-        customData: String,
-        rewarded: @escaping (Bool) -> Void
-    ) async {
-        #if canImport(GoogleMobileAds)
-        productionAdUnitID = adUnitID
-        statsUserID = userID
-        message = nil
-        print("🎬 Rewarded AdMob ID réellement chargé : \(effectiveAdUnitID)")
-        
-        do {
-            let ad = try await loadAdIfNeeded(customData: customData)
-            guard let rootViewController = UIApplication.shared.activeRootViewController else {
-                message = "Impossible d'ouvrir la pub pour le moment."
-                rewarded(false)
-                return
-            }
-
-            didEarnReward = false
-            pendingRewardCompletion = rewarded
-            ad.present(from: rootViewController) { [weak self] in
-                Task { @MainActor in
-                    self?.didEarnReward = true
-                }
-            }
-        } catch {
-            let nsError = error as NSError
-
-            print(
-                "❌ Rewarded AdMob error domain=\(nsError.domain) code=\(nsError.code) message=\(nsError.localizedDescription)"
-            )
-
-            if nsError.code == 1 {
-                message = "Aucune publicité disponible pour le moment. Réessaie dans quelques instants."
-            } else {
-                message = "Pub indisponible: \(nsError.localizedDescription)"
-            }
-
-            rewarded(false)
-        }
-        #else
-        message = "Le SDK GoogleMobileAds n'est pas lie a cette cible."
-        rewarded(false)
-        #endif
-    }
-
-    #if canImport(GoogleMobileAds)
-    private func loadAdIfNeeded(customData: String) async throws -> RewardedAd {
-        if let rewardedAd {
-            return rewardedAd
-        }
-
-        return try await loadAd(customData: customData)
-    }
-
-    @discardableResult
-    private func loadAd(customData: String, retryCount: Int = 2) async throws -> RewardedAd {
-        isLoading = true
-        defer { isLoading = false }
-
-        do {
-            let ad = try await RewardedAd.load(with: effectiveAdUnitID, request: Request())
-            let options = ServerSideVerificationOptions()
-            options.customRewardText = customData
-            ad.serverSideVerificationOptions = options
-            ad.fullScreenContentDelegate = self
-            rewardedAd = ad
-            return ad
-        } catch {
-            guard retryCount > 0 else { throw error }
-            try await Task.sleep(nanoseconds: 800_000_000)
-            return try await loadAd(customData: customData, retryCount: retryCount - 1)
-        }
-    }
-
-    private func finishRewardFlow(earnedReward: Bool) {
-        rewardedAd = nil
-        let completion = pendingRewardCompletion
-        pendingRewardCompletion = nil
-        completion?(earnedReward)
-        Task { try? await loadAd(customData: "preload") }
-    }
-    #endif
-}
-
-#if canImport(GoogleMobileAds)
-extension RewardedGridAccessAd: FullScreenContentDelegate {
-    nonisolated func adDidRecordImpression(_ ad: FullScreenPresentingAd) {
-        Task { @MainActor in
-            AdStatsRecorder.record(userID: statsUserID, placement: "rewarded", event: "impression")
-        }
-    }
-
-    nonisolated func adDidRecordClick(_ ad: FullScreenPresentingAd) {
-        Task { @MainActor in
-            AdStatsRecorder.record(userID: statsUserID, placement: "rewarded", event: "click")
-        }
-    }
-
-    nonisolated func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
-        Task { @MainActor in
-            finishRewardFlow(earnedReward: didEarnReward)
-        }
-    }
-
-    nonisolated func ad(
-        _ ad: FullScreenPresentingAd,
-        didFailToPresentFullScreenContentWithError error: Error
-    ) {
-        Task { @MainActor in
-            message = "Pub indisponible: \(error.localizedDescription)"
-            finishRewardFlow(earnedReward: false)
-        }
-    }
-}
-#endif
-
-private extension UIApplication {
-    var activeRootViewController: UIViewController? {
-        connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }?
-            .rootViewController
     }
 }
 
@@ -1298,55 +1098,6 @@ private struct HomeCommunicationConfig {
     }
 }
 
-private struct AdPlacementConfig {
-    var placements: [String: AdPlacementRule] = [:]
-
-    init() {}
-
-    init(snapshot: DocumentSnapshot?) {
-        guard let data = snapshot?.data(),
-              let rawPlacements = data["placements"] as? [String: [String: Any]] else {
-            return
-        }
-
-        placements = rawPlacements.mapValues(AdPlacementRule.init(data:))
-    }
-
-    func isEnabled(_ placementID: String, at date: Date = Date()) -> Bool {
-        guard let placement = placements[placementID] else {
-            return true
-        }
-
-        return placement.isEnabled(at: date)
-    }
-}
-
-private struct AdPlacementRule {
-    var isEnabled = true
-    var startsAt: Date?
-    var endsAt: Date?
-
-    nonisolated init(data: [String: Any]) {
-        isEnabled = data["isEnabled"] as? Bool ?? true
-        startsAt = (data["startsAt"] as? Timestamp)?.dateValue()
-        endsAt = (data["endsAt"] as? Timestamp)?.dateValue()
-    }
-
-    func isEnabled(at date: Date) -> Bool {
-        guard isEnabled else { return false }
-
-        if let startsAt, date < startsAt {
-            return false
-        }
-
-        if let endsAt, date > endsAt {
-            return false
-        }
-
-        return true
-    }
-}
-
 private struct HomeCommunication: Identifiable {
     static let admobCommunicationID = "admobCommunication"
 
@@ -1596,14 +1347,11 @@ private struct HomeContent: View {
     let isLoadingPublishedGrids: Bool
     let gridLoadingMessage: String?
     let gridAccessMessage: String?
-    let isLoadingRewardedAd: Bool
-    let requiresRewardedAd: Bool
     let selectedGridIsCompleted: Bool
     let selectedGridIsUpcoming: Bool
     let selectedGridIsCurrent: Bool
     let communicationConfig: HomeCommunicationConfig
     let activeCommunications: [HomeCommunication]
-    let adPlacementConfig: AdPlacementConfig
     let pollVoteAction: (HomeCommunication, String) -> Void
     let profileAction: () -> Void
     let previousGridAction: () -> Void
@@ -1613,20 +1361,17 @@ private struct HomeContent: View {
 
     @State private var contentWidth: CGFloat = UIScreen.main.bounds.width - 34
 
-    private var adBlockHeight: CGFloat {
-        (contentWidth / (16 / 9)) + 78
-    }
-
     private var sponsoredBlockHeight: CGFloat {
         let ratio = activeCommunications.first(where: { $0.type == .sponsored })?.imageAspectRatio ?? (16 / 9)
         return contentWidth / ratio
     }
 
+    private var nativeAdBlockHeight: CGFloat {
+        (contentWidth / (16 / 9)) + 78
+    }
+
     private var activeCommunicationPosition: Int {
         guard let communication = activeCommunications.first else { return 2 }
-        if communication.id == HomeCommunication.admobCommunicationID {
-            return communicationConfig.communicationPositions[communication.id] ?? 2
-        }
         return communication.position
     }
 
@@ -1656,8 +1401,6 @@ private struct HomeContent: View {
                 isLoading: isLoadingPublishedGrids,
                 message: gridLoadingMessage,
                 accessMessage: gridAccessMessage,
-                isLoadingRewardedAd: isLoadingRewardedAd,
-                requiresRewardedAd: requiresRewardedAd,
                 isCompleted: selectedGridIsCompleted,
                 isUpcoming: selectedGridIsUpcoming,
                 isCurrent: selectedGridIsCurrent,
@@ -1692,12 +1435,10 @@ private struct HomeContent: View {
             HomeAnnouncementCard(
                 communications: activeCommunications,
                 config: communicationConfig,
-                adPlacementConfig: adPlacementConfig,
                 userID: userID,
                 isEditor: isEditor,
-                adMediaAspectRatio: 16 / 9,
-                adBlockHeight: adBlockHeight,
                 sponsoredBlockHeight: sponsoredBlockHeight,
+                nativeAdBlockHeight: nativeAdBlockHeight,
                 pollVoteAction: pollVoteAction
             )
         }
@@ -1860,12 +1601,10 @@ private struct PublicProfileListCard: View {
 private struct HomeAnnouncementCard: View {
     let communications: [HomeCommunication]
     let config: HomeCommunicationConfig
-    let adPlacementConfig: AdPlacementConfig
     let userID: String
     let isEditor: Bool
-    let adMediaAspectRatio: CGFloat
-    let adBlockHeight: CGFloat
     let sponsoredBlockHeight: CGFloat
+    let nativeAdBlockHeight: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
 
     var body: some View {
@@ -1877,10 +1616,8 @@ private struct HomeAnnouncementCard: View {
             } else if communications.count == 1, let communication = communications.first {
                 HomeCommunicationSlide(
                     communication: communication,
-                    adPlacementConfig: adPlacementConfig,
                     userID: userID,
                     isEditor: isEditor,
-                    adMediaAspectRatio: adMediaAspectRatio,
                     pollVoteAction: pollVoteAction
                 )
             } else {
@@ -1888,10 +1625,8 @@ private struct HomeAnnouncementCard: View {
                     ForEach(communications) { communication in
                         HomeCommunicationSlide(
                             communication: communication,
-                            adPlacementConfig: adPlacementConfig,
                             userID: userID,
                             isEditor: isEditor,
-                            adMediaAspectRatio: adMediaAspectRatio,
                             pollVoteAction: pollVoteAction
                         )
                     }
@@ -1912,7 +1647,7 @@ private struct HomeAnnouncementCard: View {
     }
 
     private var blockHeight: CGFloat {
-        if communications.contains(where: { $0.type == .ad }) { return adBlockHeight }
+        if communications.contains(where: { $0.type == .ad }) { return nativeAdBlockHeight }
         if communications.contains(where: { $0.type == .sponsored }) { return sponsoredBlockHeight }
         return config.blockHeightPoints
     }
@@ -1973,10 +1708,8 @@ private struct RemoteAnimatedMediaView: UIViewRepresentable {
 
 private struct HomeCommunicationSlide: View {
     let communication: HomeCommunication
-    let adPlacementConfig: AdPlacementConfig
     let userID: String
     let isEditor: Bool
-    let adMediaAspectRatio: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
     @State private var didRecordSponsoredImpression = false
 
@@ -1986,7 +1719,12 @@ private struct HomeCommunicationSlide: View {
             case .poll:
                 pollView
             case .ad:
-                adView
+                HomeNativeAdCard(
+                    adUnitID: "ca-app-pub-1003964550278910/8837551728",
+                    userID: userID,
+                    mediaAspectRatio: 16 / 9,
+                    fillsAvailableSpace: true
+                )
             case .sponsored:
                 sponsoredView
             case .image, .text:
@@ -2107,23 +1845,6 @@ private struct HomeCommunicationSlide: View {
         .background(Color.xpPanel)
     }
 
-    private var adView: some View {
-        Group {
-            if adPlacementConfig.isEnabled("communicationBlock") {
-                HomeNativeAdCard(
-                    adUnitID: "ca-app-pub-1003964550278910/6276883284",
-                    userID: userID,
-                    mediaAspectRatio: adMediaAspectRatio,
-                    fillsAvailableSpace: true
-                )
-            } else {
-                Color.white
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.xpPanel)
-    }
-
     private var communicationText: some View {
         Text(communication.text)
             .font(.xpTahoma(size: 17, weight: .bold))
@@ -2162,8 +1883,6 @@ private struct PublishedGridCard: View {
     let isLoading: Bool
     let message: String?
     let accessMessage: String?
-    let isLoadingRewardedAd: Bool
-    let requiresRewardedAd: Bool
     let isCompleted: Bool
     let isUpcoming: Bool
     let isCurrent: Bool
@@ -2196,11 +1915,7 @@ private struct PublishedGridCard: View {
             return "A venir"
         }
 
-        if isLoadingRewardedAd {
-            return "Chargement..."
-        }
-
-        return requiresRewardedAd ? "Jouer après pub" : "Jouer"
+        return "Jouer"
     }
 
     var body: some View {
@@ -2262,8 +1977,8 @@ private struct PublishedGridCard: View {
                 }
                 .buttonStyle(XPButtonStyle())
                 .frame(maxWidth: .infinity)
-                .opacity(grid == nil || isUpcoming || isLoadingRewardedAd ? 0.45 : 1)
-                .disabled(grid == nil || isUpcoming || isLoadingRewardedAd)
+                .opacity(grid == nil || isUpcoming ? 0.45 : 1)
+                .disabled(grid == nil || isUpcoming)
 
                 Button(action: nextAction) {
                     Text(">")
@@ -3487,7 +3202,6 @@ private struct CrosswordCell: View {
                             let elbowX = startX + arrowSize * 1
                             let elbowY = startY
                             
-                            let tipX = elbowX
                             let tipY = elbowY + arrowSize * 1.6
                             
                             path.move(to: CGPoint(x: startX, y: elbowY))
@@ -3588,31 +3302,18 @@ private struct NativeKeyboardInput: UIViewRepresentable {
     let backspace: () -> Void
     let closeKeyboard: () -> Void
     
-    func makeUIView(context: Context) -> KeyboardTextField {
-        let textField = KeyboardTextField()
-        textField.keyboardType = .asciiCapable
-        textField.autocapitalizationType = .allCharacters
-        textField.autocorrectionType = .no
-        textField.spellCheckingType = .no
-        textField.smartInsertDeleteType = .no
-        textField.returnKeyType = .done
-        textField.textContentType = nil
-        textField.inputAssistantItem.leadingBarButtonGroups = []
-        textField.inputAssistantItem.trailingBarButtonGroups = []
-        textField.tintColor = .clear
-        textField.textColor = .clear
-        textField.backgroundColor = .clear
-        textField.delegate = context.coordinator
-        textField.deleteBackwardHandler = backspace
-        textField.isUserInteractionEnabled = true
-        return textField
+    func makeUIView(context: Context) -> KeyboardInputView {
+        let inputView = KeyboardInputView()
+        inputView.typeLetter = typeLetter
+        inputView.backspace = backspace
+        inputView.closeKeyboard = closeKeyboard
+        return inputView
     }
     
-    func updateUIView(_ uiView: KeyboardTextField, context: Context) {
-        context.coordinator.typeLetter = typeLetter
-        context.coordinator.backspace = backspace
-        context.coordinator.closeKeyboard = closeKeyboard
-        uiView.deleteBackwardHandler = backspace
+    func updateUIView(_ uiView: KeyboardInputView, context: Context) {
+        uiView.typeLetter = typeLetter
+        uiView.backspace = backspace
+        uiView.closeKeyboard = closeKeyboard
         
         if isActive {
             openKeyboard(uiView)
@@ -3621,72 +3322,40 @@ private struct NativeKeyboardInput: UIViewRepresentable {
         }
     }
     
-    private func openKeyboard(_ textField: KeyboardTextField) {
+    private func openKeyboard(_ inputView: KeyboardInputView) {
         DispatchQueue.main.async {
-            guard textField.window != nil else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    openKeyboard(textField)
-                }
-                return
-            }
-            
-            if !textField.isFirstResponder {
-                textField.becomeFirstResponder()
+            guard inputView.window != nil else { return }
+
+            if !inputView.isFirstResponder {
+                inputView.becomeFirstResponder()
             }
         }
     }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(
-            typeLetter: typeLetter,
-            backspace: backspace,
-            closeKeyboard: closeKeyboard
-        )
-    }
-    
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var typeLetter: (String) -> Void
-        var backspace: () -> Void
-        var closeKeyboard: () -> Void
-        
-        init(
-            typeLetter: @escaping (String) -> Void,
-            backspace: @escaping () -> Void,
-            closeKeyboard: @escaping () -> Void
-        ) {
-            self.typeLetter = typeLetter
-            self.backspace = backspace
-            self.closeKeyboard = closeKeyboard
-        }
-        
-        func textField(
-            _ textField: UITextField,
-            shouldChangeCharactersIn range: NSRange,
-            replacementString string: String
-        ) -> Bool {
-            if string == "\n" {
-                closeKeyboard()
-            } else if string.isEmpty {
-                backspace()
-            } else if let character = string.uppercased().first, character.isLetter {
-                typeLetter(String(character))
+
+    final class KeyboardInputView: UIView, UIKeyInput {
+        var typeLetter: ((String) -> Void)?
+        var backspace: (() -> Void)?
+        var closeKeyboard: (() -> Void)?
+
+        var keyboardType: UIKeyboardType = .asciiCapable
+        var autocapitalizationType: UITextAutocapitalizationType = .allCharacters
+        var autocorrectionType: UITextAutocorrectionType = .no
+        var spellCheckingType: UITextSpellCheckingType = .no
+        var returnKeyType: UIReturnKeyType = .done
+
+        override var canBecomeFirstResponder: Bool { true }
+        var hasText: Bool { true }
+
+        func insertText(_ text: String) {
+            if text == "\n" {
+                closeKeyboard?()
+            } else if let character = text.uppercased().first, character.isLetter {
+                typeLetter?(String(character))
             }
-            
-            textField.text = ""
-            return false
         }
-    }
-    
-    final class KeyboardTextField: UITextField {
-        var deleteBackwardHandler: (() -> Void)?
-        
-        override var textInputContextIdentifier: String? {
-            nil
-        }
-        
-        override func deleteBackward() {
-            deleteBackwardHandler?()
-            super.deleteBackward()
+
+        func deleteBackward() {
+            backspace?()
         }
     }
 }
@@ -4809,14 +4478,12 @@ private struct ProfileTextField: View {
     var textContentType: UITextContentType?
     
     var body: some View {
-        TextField(text: $text) {
-            Text(prompt)
-                .foregroundStyle(.gray)
-        }
-        .textInputAutocapitalization(.never)
-        .keyboardType(keyboard)
-        .textContentType(textContentType)
-        .autocorrectionDisabled()
+        PasteDisabledTextField(
+            text: $text,
+            placeholder: prompt,
+            keyboardType: keyboard,
+            textContentType: textContentType
+        )
         .profileInputStyle()
     }
 }

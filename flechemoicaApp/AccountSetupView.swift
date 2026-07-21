@@ -42,6 +42,13 @@ struct AccountSetupView: View {
     @State private var isSendingPasswordReset = false
     @State private var currentAppleSignInNonce: String?
     @State private var appleSignInCoordinator: AppleSignInCoordinator?
+    @FocusState private var focusedAuthField: AuthField?
+
+    fileprivate enum AuthField: Hashable {
+        case pseudo
+        case email
+        case password
+    }
 
     var body: some View {
         GeometryReader { _ in
@@ -73,20 +80,30 @@ struct AccountSetupView: View {
 
                                 VStack(alignment: .leading, spacing: 14) {
                                     if authMode == .signUp {
-                                        XPTextField(text: $pseudo, prompt: "Pseudo", textContentType: .nickname)
+                                        XPTextField(
+                                            text: $pseudo,
+                                            prompt: "Pseudo",
+                                            textContentType: .nickname,
+                                            focusedField: $focusedAuthField,
+                                            field: .pseudo
+                                        )
                                     }
 
                                     XPTextField(
                                         text: $email,
                                         prompt: "E-mail",
                                         keyboard: .emailAddress,
-                                        textContentType: .username
+                                        textContentType: .username,
+                                        focusedField: $focusedAuthField,
+                                        field: .email
                                     )
 
                                     XPSecureField(
                                         text: $password,
                                         prompt: "Mot de Passe",
-                                        textContentType: authMode == .signUp ? .newPassword : .password
+                                        textContentType: authMode == .signUp ? .newPassword : .password,
+                                        focusedField: $focusedAuthField,
+                                        field: .password
                                     )
 
                                     if authMode == .signUp {
@@ -258,6 +275,7 @@ struct AccountSetupView: View {
         isSubmitting = false
         isSendingPasswordReset = false
         statusText = ""
+        focusedAuthField = nil
     }
 
     private func selectPreviousAvatar() {
@@ -895,27 +913,31 @@ private struct XPMenuButton: View {
 
 private struct XPTextField: View {
     @Binding var text: String
+
     var prompt: String
     var keyboard: UIKeyboardType = .default
     var textContentType: UITextContentType?
+    var focusedField: FocusState<AccountSetupView.AuthField?>.Binding
+    var field: AccountSetupView.AuthField
 
     var body: some View {
-        TextField(text: $text) {
-            Text(prompt)
-                .foregroundStyle(.gray)
-        }
-        .textInputAutocapitalization(.never)
-        .keyboardType(keyboard)
-        .textContentType(textContentType)
-        .autocorrectionDisabled()
+        PasteDisabledTextField(
+            text: $text,
+            placeholder: prompt,
+            keyboardType: keyboard,
+            textContentType: textContentType
+        )
         .xpInputStyle()
     }
 }
 
 private struct XPSecureField: View {
     @Binding var text: String
+
     var prompt: String
     var textContentType: UITextContentType? = .password
+    var focusedField: FocusState<AccountSetupView.AuthField?>.Binding
+    var field: AccountSetupView.AuthField
 
     var body: some View {
         SecurePasswordTextField(

@@ -21,6 +21,7 @@ struct LaunchScreenView: View {
 
                     XPProgressBar(progress: progress)
                         .frame(width: 236, height: 22)
+                        .padding(.top, 10)
                 }
 
                 Spacer()

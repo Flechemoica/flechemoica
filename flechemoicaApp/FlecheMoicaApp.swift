@@ -3,16 +3,16 @@ import GoogleSignIn
 import SwiftUI
 import UserNotifications
 
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
+
 #if canImport(FirebaseAppCheck)
 import FirebaseAppCheck
 #endif
 
 #if canImport(FirebaseAnalytics)
 import FirebaseAnalytics
-#endif
-
-#if canImport(GoogleMobileAds)
-import GoogleMobileAds
 #endif
 
 #if canImport(FirebaseAppCheck)
@@ -40,6 +40,11 @@ struct FlecheMoicaApp: App {
 
         FirebaseConfiguration.shared.setLoggerLevel(.min)
         FirebaseApp.configure()
+
+        #if canImport(GoogleMobileAds)
+        MobileAds.shared.start()
+        #endif
+
         Task {
             do {
                 try await UNUserNotificationCenter.current().setBadgeCount(0)
@@ -51,12 +56,6 @@ struct FlecheMoicaApp: App {
         #if canImport(FirebaseAnalytics)
         Analytics.logEvent("app_started", parameters: nil)
         #endif
-
-#if canImport(GoogleMobileAds)
-if Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") != nil {
-    MobileAds.shared.start(completionHandler: nil)
-}
-#endif
 
     }
 

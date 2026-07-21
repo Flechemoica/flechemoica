@@ -6,7 +6,6 @@ import FirebaseFirestore
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
-
 enum AdStatsRecorder {
     static func record(userID: String?, placement: String, event: String) {
         guard let userID, !userID.isEmpty else { return }
@@ -113,7 +112,11 @@ private struct NativeAdContainer: View {
     @StateObject private var loader = NativeAdLoader()
 
     private var effectiveAdUnitID: String {
-        AdMobConfiguration.nativeAdUnitID(productionID: adUnitID)
+        #if DEBUG
+        return "ca-app-pub-3940256099942544/3986624511"
+        #else
+        return adUnitID
+        #endif
     }
 
     var body: some View {
@@ -169,11 +172,7 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
         isLoading = true
         placeholderMessage = "Chargement de l'annonce native AdMob..."
 
-        MobileAds.shared.start { [weak self] _ in
-            DispatchQueue.main.async { [weak self] in
-                self?.loadAd(adUnitID: adUnitID)
-            }
-        }
+        loadAd(adUnitID: adUnitID)
     }
 
     private func loadAd(adUnitID: String) {
