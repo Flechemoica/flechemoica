@@ -389,6 +389,10 @@ body {
   overflow: visible;
 }
 
+.card label {
+    font-weight: bold;
+}
+
 .separator-right::after {
   content: "";
   position: absolute;
