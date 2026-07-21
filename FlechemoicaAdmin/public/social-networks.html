@@ -1,0 +1,145 @@
+<script>
+  if (!document.getElementById("dashboard-view")) {
+    window.location.replace("/reseaux-sociaux.html");
+  }
+</script>
+
+<div class="workspace-header workspace-header-row social-header-row">
+  <div>
+    <h2>Réseaux sociaux</h2>
+  </div>
+  <div class="users-toolbar social-toolbar">
+    <button class="ghost-button icon-button" id="social-settings-button" type="button" aria-label="Réglages des réseaux sociaux" title="Réglages" aria-expanded="false">
+      <span aria-hidden="true">⚙</span>
+    </button>
+    <button class="primary-button compact-button" id="social-add-button" type="button" aria-label="Créer une publication" title="Nouvelle publication">+</button>
+    <p class="panel-status" id="social-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+
+<section class="social-settings-panel is-hidden" id="social-settings-panel" aria-label="Réglages des réseaux sociaux">
+  <div class="social-settings-heading">
+    <div>
+      <span class="metric-label">Connexions</span>
+      <h3>Comptes sociaux</h3>
+    </div>
+    <p>Connecte les comptes pour synchroniser leur profil, leurs publications et les fonctionnalités autorisées.</p>
+  </div>
+  <div class="social-connect-grid">
+    <div class="social-connect-card" data-social-settings="instagram">
+      <span class="social-brand-icon social-brand-instagram" aria-hidden="true">◎</span>
+      <div class="social-connect-copy">
+        <strong>Instagram</strong>
+        <span data-social-connection-label="instagram">Non configuré</span>
+      </div>
+      <button class="primary-button" id="instagram-connect-button" type="button">Connecter Instagram</button>
+    </div>
+    <div class="social-connect-card" data-social-settings="tiktok">
+      <span class="social-brand-icon social-brand-tiktok" aria-hidden="true">♪</span>
+      <div class="social-connect-copy">
+        <strong>TikTok</strong>
+        <span data-social-connection-label="tiktok">Non configuré</span>
+      </div>
+      <button class="primary-button" id="tiktok-connect-button" type="button">Connecter TikTok</button>
+    </div>
+  </div>
+</section>
+
+<form class="social-composer is-hidden" id="social-composer">
+  <div class="social-composer-heading">
+    <div>
+      <span class="metric-label">Nouvelle publication</span>
+      <h3>Créer un contenu</h3>
+    </div>
+    <button class="ghost-button icon-button" id="social-composer-close" type="button" aria-label="Fermer">×</button>
+  </div>
+  <div class="social-composer-grid">
+    <div class="field-group">
+      <label for="social-media-input">Photo ou vidéo</label>
+      <div class="json-drop-zone social-media-drop" id="social-media-drop" role="button" tabindex="0">
+        <strong>Glisser un média ici</strong>
+        <span>ou cliquer pour le choisir</span>
+        <input id="social-media-input" type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple required>
+      </div>
+      <div class="social-media-preview is-hidden" id="social-media-preview"></div>
+      <div class="social-media-thumbnails is-hidden" id="social-media-thumbnails" aria-label="Images du carrousel"></div>
+      <div class="social-crop-controls is-hidden" id="social-crop-controls">
+        <div class="social-ratio-picker" role="group" aria-label="Format Instagram">
+          <button type="button" data-crop-ratio="1.7777777778">Paysage 16:9</button>
+          <button type="button" data-crop-ratio="1" class="is-active">Carré 1:1</button>
+          <button type="button" data-crop-ratio="0.8">Portrait 4:5</button>
+        </div>
+        <label class="social-zoom-control" for="social-crop-zoom">
+          <span>Zoom</span>
+          <input id="social-crop-zoom" type="range" min="1" max="3" step="0.01" value="1">
+        </label>
+        <p>Fais glisser l’image pour la déplacer dans le cadre.</p>
+      </div>
+    </div>
+    <div class="social-composer-fields">
+      <div class="field-group">
+        <label for="social-caption">Légende</label>
+        <textarea id="social-caption" rows="6" maxlength="2200" placeholder="Écris ta légende et tes hashtags…"></textarea>
+      </div>
+      <fieldset class="social-destinations social-destination-switch">
+        <legend>Publier sur</legend>
+        <label><input type="radio" name="destination" value="instagram" checked><span>Instagram</span></label>
+        <label><input type="radio" name="destination" value="tiktok"><span>TikTok</span></label>
+      </fieldset>
+      <div class="field-group is-hidden" id="tiktok-publish-options">
+        <label for="tiktok-privacy-level">Confidentialité TikTok</label>
+        <select id="tiktok-privacy-level" required disabled>
+          <option value="">Connecte TikTok pour charger les choix</option>
+        </select>
+        <p class="panel-status">TikTok demande de confirmer la confidentialité avant chaque publication.</p>
+      </div>
+      <div class="button-row">
+        <button class="primary-button social-publish-button" type="submit">Publier</button>
+        <button class="ghost-button" id="social-composer-cancel" type="button">Annuler</button>
+      </div>
+      <p class="panel-status">Le contenu sera publié directement sur le réseau sélectionné si le compte est connecté.</p>
+    </div>
+  </div>
+</form>
+
+<div class="social-columns">
+  <section class="social-network-column" data-social-network="instagram">
+    <article class="social-profile-card social-profile-instagram">
+      <a class="social-avatar" href="https://www.instagram.com/flechemoica/" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir le profil Instagram"><img data-instagram-profile-picture src="/assets/img/flechemoica-logo.png" alt="Photo de profil Instagram"></a>
+      <a class="social-profile-copy social-profile-main-link" data-social-link="instagram" href="https://www.instagram.com/flechemoica/" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir le profil Instagram de flechemoica">
+        <span class="social-platform-label">Instagram</span>
+        <h3 data-social-name="instagram">Flèche-moi ça</h3>
+        <span class="social-profile-handle">@<span data-social-handle="instagram">flechemoica</span></span>
+        <p class="social-biography" data-instagram-biography></p>
+        <div class="social-profile-stats">
+          <span><strong data-instagram-followers>—</strong> abonnés</span>
+          <span><strong data-instagram-following>—</strong> abonnements</span>
+        </div>
+      </a>
+      <span class="social-connection-badge" data-social-badge="instagram">À configurer</span>
+      <a class="social-message-shortcut" href="https://www.instagram.com/direct/inbox/" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir les messages Instagram" title="Messages Instagram">
+        <span class="social-message-emoji" aria-hidden="true">💬</span>
+        <span class="social-message-badge is-hidden" data-message-badge="instagram">0</span>
+      </a>
+    </article>
+    <div class="social-grid-heading"><h3>Publications</h3><span data-social-count="instagram">0 publication</span></div>
+    <div class="social-content-grid" data-social-grid="instagram"></div>
+  </section>
+
+  <section class="social-network-column" data-social-network="tiktok">
+    <article class="social-profile-card social-profile-tiktok">
+      <div class="social-avatar"><img data-tiktok-profile-picture src="/assets/img/flechemoica-logo.png" alt="Photo de profil TikTok"></div>
+      <div class="social-profile-copy">
+        <span class="social-platform-label">TikTok</span>
+        <h3 data-social-name="tiktok">Flèche-moi ça</h3>
+        <a data-social-link="tiktok" href="https://www.tiktok.com/@flechemoica" target="_blank" rel="noopener noreferrer">@<span data-social-handle="tiktok">flechemoica</span></a>
+      </div>
+      <span class="social-connection-badge" data-social-badge="tiktok">À configurer</span>
+      <a class="social-message-shortcut" href="https://www.tiktok.com/messages" target="_blank" rel="noopener noreferrer" aria-label="Ouvrir les messages TikTok" title="Messages TikTok">
+        <span class="social-message-emoji" aria-hidden="true">💬</span>
+      </a>
+    </article>
+    <div class="social-grid-heading"><h3>Publications</h3><span data-social-count="tiktok">0 contenu</span></div>
+    <div class="social-content-grid" data-social-grid="tiktok"></div>
+  </section>
+</div>

@@ -153,8 +153,8 @@ const NotificationsView = (() => {
 
     const body = String(bodyInput?.value || "").trim();
     const scheduledAt = String(scheduledAtInput?.value || "").trim();
-    const sound = String(soundSelect?.value || "disabled");
-    const badge = String(badgeSelect?.value || "disabled");
+    const sound = String(soundSelect?.value || "default");
+    const badge = String(badgeSelect?.value || "1");
     const expirationValue = Number.parseInt(String(expirationValueInput?.value || "1"), 10);
     const expirationUnit = String(expirationUnitSelect?.value || "days");
 
@@ -192,8 +192,8 @@ const NotificationsView = (() => {
       });
       form.reset();
       if (titleInput) titleInput.value = "Flèche-moi ça";
-      if (soundSelect) soundSelect.value = "disabled";
-      if (badgeSelect) badgeSelect.value = "disabled";
+      if (soundSelect) soundSelect.value = "default";
+      if (badgeSelect) badgeSelect.value = "1";
       if (expirationValueInput) expirationValueInput.value = "1";
       if (expirationUnitSelect) expirationUnitSelect.value = "days";
       hideForm();
@@ -210,7 +210,7 @@ const NotificationsView = (() => {
     if (!docs.length) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.className = "empty-cell";
       cell.textContent = "Aucune notification.";
       row.append(cell);
@@ -230,7 +230,8 @@ const NotificationsView = (() => {
       makeBadgeCell(data.status || "-"),
       makeTextCell(formatDelivery(data.delivery)),
       makeTextCell(formatValue(data.scheduledAt)),
-      makeSentCell(id, data)
+      makeSentCell(id, data),
+      makeDeleteCell(id, data)
     );
     return row;
   }
@@ -250,7 +251,14 @@ const NotificationsView = (() => {
     if (normalized === "scheduled") badge.classList.add("status-badge-scheduled");
     if (normalized === "cancelled") badge.classList.add("status-badge-blocked");
     if (normalized === "failed") badge.classList.add("status-badge-blocked");
-    badge.textContent = value || "-";
+      const statusLabels = {
+        sent: "Envoyée",
+        scheduled: "Programmée",
+        cancelled: "Annulée",
+        failed: "Échec"
+      };
+
+      badge.textContent = statusLabels[normalized] ?? value ?? "-";
     cell.append(badge);
     return cell;
   }
@@ -271,6 +279,17 @@ const NotificationsView = (() => {
     return cell;
   }
 
+  function makeDeleteCell(id, data) {
+    const cell = document.createElement("td");
+    const button = document.createElement("button");
+    button.className = "ghost-button compact-action-button danger-action-button";
+    button.type = "button";
+    button.textContent = "Supprimer";
+    button.addEventListener("click", () => deleteNotification(id, data));
+    cell.append(button);
+    return cell;
+  }
+
   async function cancelScheduledNotification(notificationID) {
     if (!notificationID) return;
     if (!window.confirm("Annuler cette notification programmée ?")) return;
@@ -281,6 +300,26 @@ const NotificationsView = (() => {
       setStatus("Notification annulée.");
     } catch (error) {
       setStatus(error.message || "Impossible d'annuler la notification.", "error");
+    }
+  }
+
+  async function deleteNotification(notificationID, data = {}) {
+    if (!notificationID) return;
+
+    const normalizedStatus = String(data.status || "").toLowerCase();
+    const confirmMessage =
+      normalizedStatus === "scheduled"
+        ? "Supprimer cette notification programmée ? Elle ne sera jamais envoyée."
+        : "Supprimer cette notification de l'historique ?";
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      setStatus("Suppression...");
+      await functions.httpsCallable("deleteAdminNotification")({ notificationID });
+      setStatus("Notification supprimée.");
+    } catch (error) {
+      setStatus(error.message || "Impossible de supprimer la notification.", "error");
     }
   }
 

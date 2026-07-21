@@ -1,0 +1,104 @@
+<div class="workspace-header workspace-header-row invoicing-header">
+  <div><h2>Facturation</h2></div>
+  <div class="users-toolbar">
+    <button class="ghost-button icon-button" id="invoice-settings-toggle" type="button" aria-label="Réglages de facturation" title="Réglages">
+      <span aria-hidden="true">⚙</span>
+    </button>
+    <button class="primary-button compact-button" id="new-invoice-button" type="button" aria-label="Créer une nouvelle facture" title="Nouvelle facture">+</button>
+  </div>
+</div>
+
+<section class="invoice-panel is-hidden" id="invoice-settings-panel">
+  <div class="section-heading-row"><h3>Émetteur et présentation</h3></div>
+  <form id="invoice-settings-form" class="invoice-form-grid">
+    <label>Nom commercial affiché<input name="tradeName" required value="FLÈCHE-MOI ÇA"></label>
+    <label>Nom légal de l’entrepreneur<input name="legalName" required placeholder="Prénom NOM"></label>
+    <label>Forme / mention légale<input name="legalForm" value="Entrepreneur individuel" required></label>
+    <label>Adresse<input name="address" required></label>
+    <label>Complément d’adresse<input name="addressExtra"></label>
+    <label>Code postal<input name="postalCode" required></label>
+    <label>Ville<input name="city" required></label>
+    <label>Pays<input name="country" value="France" required></label>
+    <label>SIREN<input name="siren" inputmode="numeric" minlength="9" maxlength="9" required></label>
+    <label>SIRET (facultatif)<input name="siret" inputmode="numeric" minlength="14" maxlength="14"></label>
+    <label>E-mail<input name="email" type="email" value="contact@flechemoica.fr"></label>
+    <label>Téléphone<input name="phone" type="tel"></label>
+    <label>Site internet<input name="website" type="url"></label>
+    <label>IBAN<input name="iban"></label>
+    <label>BIC<input name="bic"></label>
+    <label class="invoice-checkbox"><input name="paypalEnabled" type="checkbox"> Proposer PayPal par défaut</label>
+    <label>Préfixe des factures<input name="invoicePrefix" value="FMC" required></label>
+    <label>Prochain numéro<input name="nextInvoiceNumber" type="number" min="1" value="1" required></label>
+    <label class="field-wide">Conditions de paiement<textarea name="paymentTerms" rows="2">Paiement à réception de la facture.</textarea></label>
+    <label class="field-wide">Pénalités de retard<textarea name="latePenalties" rows="2">Pénalités exigibles en cas de retard de paiement.</textarea></label>
+    <label class="field-wide">Indemnité forfaitaire<textarea name="recoveryIndemnity" rows="2">Indemnité forfaitaire pour frais de recouvrement : 40 €.</textarea></label>
+    <div class="invoice-form-actions field-wide"><button class="primary-button" type="submit">Enregistrer les réglages</button></div>
+  </form>
+</section>
+
+<section class="invoice-panel is-hidden" id="invoice-editor-panel">
+  <div class="section-heading-row"><h3 id="invoice-editor-title">Nouvelle facture client</h3></div>
+  <form id="invoice-form">
+    <div class="invoice-form-grid">
+      <label>N° de facture<input name="number" readonly></label>
+      <label>Date d’émission<input name="issueDate" type="date" required></label>
+      <label>Date d’échéance<input name="dueDate" type="date" required></label>
+      <label>Devise<select name="currency"><option value="EUR">EUR</option></select></label>
+      <label>Type de client<select name="clientType"><option value="individual">Particulier</option><option value="professional">Professionnel</option></select></label>
+      <label id="invoice-client-siren-field" hidden>SIREN du client professionnel<input name="clientSiren" inputmode="numeric" pattern="[0-9]{9}" minlength="9" maxlength="9" placeholder="9 chiffres"></label>
+      <label>Client / raison sociale<input name="clientName" required></label>
+      <label>Service / contact (facultatif)<input name="clientSecondaryLine"></label>
+      <label class="field-wide">Adresse du client<input name="clientAddress" required></label>
+      <label>Code postal<input name="clientPostalCode" required></label>
+      <label>Ville<input name="clientCity" required></label>
+      <label>Pays<input name="clientCountry" value="France" required></label>
+      <label>E-mail du client<input name="clientEmail" type="email" autocomplete="off" required></label>
+      <label class="invoice-checkbox field-wide"><input name="paypalEnabled" type="checkbox"> Ajouter un lien de paiement par carte via PayPal</label>
+    </div>
+
+    <div class="section-heading-row invoice-lines-heading">
+      <h3>Lignes</h3><button class="ghost-button" id="add-invoice-line" type="button">Ajouter une ligne</button>
+    </div>
+    <div id="invoice-lines"></div>
+    <div class="invoice-totals" aria-live="polite">
+      <span>Total HT <strong id="invoice-total-ex-tax">0,00 €</strong></span>
+      <span>TVA <strong id="invoice-total-vat">0,00 €</strong></span>
+      <span>Total TTC / Net à payer <strong id="invoice-total-inc-tax">0,00 €</strong></span>
+    </div>
+    <div class="invoice-form-actions">
+      <button class="ghost-button" id="cancel-invoice-button" type="button">Annuler</button>
+      <select name="status" aria-label="Statut de la facture">
+        <option value="created">Créée</option>
+        <option value="sent">Envoyée</option>
+        <option value="paid_card">Payée (carte)</option>
+        <option value="paid_bank">Payée (virement)</option>
+      </select>
+      <button class="primary-button" id="invoice-submit-button" type="submit">OK</button>
+    </div>
+  </form>
+</section>
+
+<dialog class="invoice-line-dialog" id="invoice-line-dialog">
+  <form method="dialog" id="invoice-line-choice-form">
+    <div class="section-heading-row"><h3>Ajouter une ligne</h3></div>
+    <label>Source de la ligne
+      <select id="invoice-line-source">
+        <option value="other">Autre — ligne vide</option>
+      </select>
+    </label>
+    <div class="invoice-form-actions">
+      <button class="ghost-button" value="cancel" type="submit">Annuler</button>
+      <button class="primary-button" id="confirm-invoice-line" value="default" type="submit">Ajouter</button>
+    </div>
+  </form>
+</dialog>
+
+<section class="invoice-panel">
+  <div class="section-heading-row"><h3>Factures</h3></div>
+  <div class="users-table-shell">
+    <table class="users-table invoice-list-table">
+      <thead><tr><th>N°</th><th>Date</th><th>Client</th><th>Net à payer</th><th>Statut</th><th></th></tr></thead>
+      <tbody id="invoice-list-body"><tr><td colspan="6">Aucune facture.</td></tr></tbody>
+    </table>
+  </div>
+</section>

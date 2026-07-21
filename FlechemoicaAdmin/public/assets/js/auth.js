@@ -1,27 +1,42 @@
-const EDITOR_STATUS = "Editor";
-
+const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
 const AuthGate = (() => {
   let auth;
   let firestore;
   let database;
 
-  function ensureFirebase() {
-    if (!window.firebase || !firebase.apps.length) {
-      throw new Error("Firebase n'est pas encore initialise.");
-    }
+    function ensureFirebase() {
+      if (!window.firebase || !firebase.apps.length) {
+        throw new Error("Firebase n'est pas encore initialise.");
+      }
 
-    auth = auth || firebase.auth();
-    firestore = firestore || (firebase.firestore ? firebase.firestore() : null);
-    database = database || (firebase.database ? firebase.database() : null);
-    return { auth, firestore, database };
-  }
+      auth = auth || firebase.auth();
+
+      if (!firestore && firebase.firestore) {
+        firestore = firebase.firestore();
+      }
+
+      database = database || (firebase.database ? firebase.database() : null);
+
+      return { auth, firestore, database };
+    }
 
   function normalizeEmail(email) {
     return String(email || "").trim().toLowerCase();
   }
 
+  function normalizeAccessValue(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
   function isEditorProfile(profile) {
-    return profile && profile.status === EDITOR_STATUS;
+    const status = normalizeAccessValue(profile?.status || profile?.role);
+    return Boolean(profile && EDITOR_STATUSES.has(status));
+  }
+
+  function hasAccountingAccess(profile) {
+    if (!profile) return false;
+
+    return profile.accountingAccess === true;
   }
 
   async function getFirestoreUser(uid, email) {
@@ -95,6 +110,18 @@ const AuthGate = (() => {
       throw new Error("Accès non autorisé.");
     }
 
+    if (profile.source === "firestore" && profile.id !== user.uid) {
+      const editorValue = normalizeAccessValue(profile.status || profile.role);
+      await firestore.collection("users").doc(user.uid).set({
+        uid: user.uid,
+        email: normalizeEmail(user.email),
+        status: editorValue,
+        role: editorValue,
+        migratedEditorSource: profile.id,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
     if (profile.emailVerificationStatus === "pending" && !user.emailVerified) {
       await user.sendEmailVerification();
       await auth.signOut();
@@ -144,8 +171,9 @@ const AuthGate = (() => {
 
   return {
     ensureFirebase,
+    hasAccountingAccess,
     onEditorStateChanged,
     signIn,
-    signOut,
+    signOut
   };
 })();

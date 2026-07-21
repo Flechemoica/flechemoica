@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Flèche-moi ça - Administration</title>
-    <link rel="stylesheet" href="assets/css/global.css">
-    <link rel="stylesheet" href="assets/css/login.css">
-    <link rel="stylesheet" href="assets/css/dashboard.css">
+    <link rel="stylesheet" href="assets/css/global.css%3Fv=20260718-0335.css">
+    <link rel="stylesheet" href="assets/css/login.css%3Fv=20260717-1940.css">
+    <link rel="stylesheet" href="assets/css/dashboard.css%3Fv=20260720-0045.css">
     <script defer src="__/firebase/12.16.0/firebase-app-compat.js"></script>
     <script defer src="__/firebase/12.16.0/firebase-auth-compat.js"></script>
     <script defer src="__/firebase/12.16.0/firebase-firestore-compat.js"></script>
@@ -14,19 +14,19 @@
     <script defer src="__/firebase/12.16.0/firebase-database-compat.js"></script>
     <script defer src="__/firebase/12.16.0/firebase-functions-compat.js"></script>
     <script defer src="__/firebase/init.js"></script>
-    <script defer src="assets/js/auth.js"></script>
-    <script defer src="assets/js/login.js"></script>
-    <script defer src="assets/js/users.js"></script>
-    <script defer src="assets/js/grids.js"></script>
-    <script defer src="assets/js/notifications.js"></script>
-    <script defer src="assets/js/communications.js"></script>
-    <script defer src="assets/js/social-networks.js"></script>
-    <script defer src="assets/js/accounting.js"></script>
+    <script defer src="assets/js/auth.js%3Fv=20260718-2358"></script>
+    <script defer src="assets/js/login.js%3Fv=20260716-1900"></script>
+    <script defer src="assets/js/users.js%3Fv=20260716-2340"></script>
+    <script defer src="assets/js/grids.js%3Fv=20260716-2340"></script>
+    <script defer src="assets/js/notifications.js%3Fv=20260717-1938"></script>
+    <script defer src="assets/js/communications.js%3Fv=20260720-0026"></script>
+    <script defer src="assets/js/social-networks.js%3Fv=20260720-0200"></script>
+    <script defer src="assets/js/accounting.js%3Fv=20260719-2320"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/jspdf@3.0.3/dist/jspdf.umd.min.js"></script>
-    <script defer src="assets/js/invoicing.js"></script>
-    <script defer src="assets/js/tasks.js"></script>
-    <script defer src="assets/js/dashboard.js"></script>
-    <script defer src="assets/js/app.js"></script>
+    <script defer src="assets/js/invoicing.js%3Fv=20260720-0014"></script>
+    <script defer src="assets/js/tasks.js%3Fv=20260720-0710"></script>
+    <script defer src="assets/js/dashboard.js%3Fv=20260720-0300"></script>
+    <script defer src="assets/js/app.js%3Fv=20260718-1315"></script>
   </head>
   <body>
     <main class="shell">

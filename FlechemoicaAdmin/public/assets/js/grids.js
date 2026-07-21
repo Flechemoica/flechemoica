@@ -966,13 +966,19 @@ const GridsView = (() => {
 
     try {
       setDetailStatus("Enregistrement...");
-      await setGridData(currentDetailData.id, {
-        placedWords: nextWords,
-        releaseAt: firebase.firestore.Timestamp.fromDate(releaseAt),
-        status: nextStatus,
-        weekId: getISOWeekID(releaseAt),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+        const updatedGrid = {
+          ...currentDetailData.grid,
+          placedWords: nextWords,
+        };
+
+        await setGridData(currentDetailData.id, {
+          placedWords: nextWords,
+          grid: JSON.stringify(updatedGrid),
+          releaseAt: firebase.firestore.Timestamp.fromDate(releaseAt),
+          status: nextStatus,
+          weekId: getISOWeekID(releaseAt),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
       setDetailStatus("Corrections enregistrées.");
       currentDetailData.placedWords = nextWords;
       currentDetailData.grid.placedWords = nextWords;
@@ -1006,18 +1012,22 @@ const GridsView = (() => {
       if (!shouldReplace) return;
 
       setDetailStatus("Remplacement de la grille...");
-      await setGridData(currentDetailData.id, {
-        blackCells: Array.isArray(grid.blackCells) ? grid.blackCells : [],
-        name: grid.name || currentDetailData.grid.name || currentDetailData.data.title || "",
-        placedWords: grid.placedWords,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
+        const normalizedGrid = {
+          ...grid,
+          blackCells: Array.isArray(grid.blackCells) ? grid.blackCells : [],
+          name: grid.name || currentDetailData.grid.name || currentDetailData.data.title || "",
+          placedWords: grid.placedWords,
+        };
 
-      currentDetailData.grid = {
-        blackCells: Array.isArray(grid.blackCells) ? grid.blackCells : [],
-        name: grid.name || currentDetailData.grid.name,
-        placedWords: grid.placedWords,
-      };
+        await setGridData(currentDetailData.id, {
+          blackCells: normalizedGrid.blackCells,
+          name: normalizedGrid.name,
+          placedWords: normalizedGrid.placedWords,
+          grid: JSON.stringify(normalizedGrid),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        currentDetailData.grid = normalizedGrid;
       currentDetailData.placedWords = grid.placedWords;
       renderGridPreview(currentDetailData.grid);
       renderGridEditor(currentDetailData.placedWords);

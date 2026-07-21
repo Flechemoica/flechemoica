@@ -1,0 +1,116 @@
+<script>
+  if (!document.getElementById("dashboard-view")) {
+    window.location.replace("/?panel=communications");
+  }
+</script>
+
+<div class="workspace-header workspace-header-row communications-header-row">
+  <div>
+    <h2>Communications</h2>
+  </div>
+  <div class="users-toolbar grids-toolbar">
+    <label class="communication-toggle" for="communication-enabled" aria-label="Activer le bloc de communication">
+      <input id="communication-enabled" type="checkbox">
+      <span></span>
+    </label>
+    <button class="primary-button compact-button" id="add-communication-button" type="button">+</button>
+    <p class="panel-status" id="communications-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+
+<form class="import-panel communication-form is-hidden" id="communication-form">
+  <input id="communication-type" type="hidden" value="text">
+  <div class="field-group">
+    <label for="communication-title">Titre</label>
+    <input id="communication-title" type="text" placeholder="Nom de la communication">
+  </div>
+
+  <label class="switch-row" for="communication-test-mode">
+    <input id="communication-test-mode" type="checkbox">
+    <span>
+      <strong>Mode test</strong><br>
+      Visible uniquement dans les applications des comptes editor.
+    </span>
+  </label>
+
+  <div class="communication-type-switch" role="radiogroup" aria-label="Type de communication">
+    <label>
+      <input type="radio" name="communication-type-choice" value="text" checked>
+      <span>Texte</span>
+    </label>
+    <label>
+      <input type="radio" name="communication-type-choice" value="image">
+      <span>Image 1077 x 500</span>
+    </label>
+    <label>
+      <input type="radio" name="communication-type-choice" value="poll">
+      <span>Sondage</span>
+    </label>
+    <label>
+      <input type="radio" name="communication-type-choice" value="sponsored">
+      <span>Publicité client</span>
+    </label>
+  </div>
+
+  <div class="communication-editor-stack">
+    <div class="field-group" id="communication-text-group">
+      <label for="communication-text">Texte</label>
+      <textarea id="communication-text" rows="5" placeholder="Message visible dans le bloc d'accueil"></textarea>
+    </div>
+
+    <div class="field-group is-hidden" id="communication-image-group">
+      <label for="communication-image">Média</label>
+      <div class="json-drop-zone" id="communication-image-drop-zone" role="button" tabindex="0" aria-controls="communication-image">
+        <strong>Glisser une image, un GIF ou une vidéo ici</strong>
+        <span>ou cliquer pour la choisir</span>
+        <input id="communication-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+      </div>
+      <p class="panel-status" id="communication-image-status">Image, GIF ou vidéo obligatoire.</p>
+      <div class="field-group" id="communication-image-overlay-group">
+        <label for="communication-image-overlay-text">Texte sur image</label>
+        <input id="communication-image-overlay-text" type="text" placeholder="Ex: LANCEMENT IMMÉDIAT">
+      </div>
+    </div>
+
+    <div class="communication-editor-stack is-hidden" id="communication-sponsored-group">
+      <div class="field-group">
+        <label for="communication-client-name">Nom du client</label>
+        <input id="communication-client-name" type="text" placeholder="Nom de l’annonceur">
+      </div>
+      <div class="field-group">
+        <label for="communication-destination-url">Lien de la publicité</label>
+        <input id="communication-destination-url" type="url" inputmode="url" placeholder="https://exemple.fr">
+      </div>
+      <div class="field-group">
+        <label for="communication-invoice-number">Numéro de facture <span class="optional-label">(facultatif)</span></label>
+        <input id="communication-invoice-number" type="text" placeholder="Ex: F-2026-0042">
+      </div>
+      <p class="panel-status">Suivi limité aux impressions, clics et visiteurs pseudonymes.</p>
+    </div>
+
+    <div class="communication-poll-builder is-hidden" id="communication-poll-builder">
+      <div class="field-group">
+        <label for="communication-poll-question">Question</label>
+        <textarea id="communication-poll-question" rows="3" placeholder="Question du sondage"></textarea>
+      </div>
+      <div class="field-group">
+        <label>Choix</label>
+        <div class="poll-options-list" id="communication-poll-options-list"></div>
+        <button class="ghost-button poll-add-option-button" id="communication-add-poll-option" type="button">+ Ajouter un choix</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="communication-periods-builder" id="communication-periods-builder">
+    <label>Périodes d’affichage</label>
+    <div id="communication-periods-list"></div>
+    <button class="ghost-button poll-add-option-button" id="communication-add-period" type="button">+ Ajouter une période</button>
+  </div>
+
+  <div class="button-row">
+    <button class="primary-button" id="communication-submit-button" type="submit">Créer la communication</button>
+    <button class="ghost-button" id="communication-cancel-button" type="button">Annuler</button>
+  </div>
+</form>
+
+<div class="communication-list" id="communications-list"></div>

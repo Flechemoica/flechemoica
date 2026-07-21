@@ -1,0 +1,158 @@
+<div class="workspace-header workspace-header-row accounting-header-row">
+  <div>
+    <h2>Comptabilité</h2>
+  </div>
+  <div class="users-toolbar accounting-toolbar">
+    <button class="ghost-button icon-button" id="accounting-refresh-button" type="button" aria-label="Actualiser les données bancaires" title="Actualiser">
+      <span aria-hidden="true">↻</span>
+    </button>
+    <button class="ghost-button icon-button" id="accounting-settings-button" type="button" aria-label="Réglages comptabilité" title="Réglages">
+      <span aria-hidden="true">⚙</span>
+    </button>
+    <p class="panel-status" id="accounting-status" role="status" aria-live="polite"></p>
+  </div>
+</div>
+
+<section class="accounting-settings-panel is-hidden" id="accounting-settings-panel" aria-label="Réglages comptabilité">
+  <div class="accounting-connect-card" id="accounting-connect-card">
+    <div>
+      <span class="metric-label">Powens</span>
+      <strong id="accounting-connection-title">Aucune banque connectée</strong>
+      <p id="accounting-connection-detail">Connecte Revolut pour importer les soldes et les dernières opérations.</p>
+    </div>
+    <button class="primary-button" id="accounting-connect-card-button" type="button">Connecter Revolut</button>
+  </div>
+
+  <div class="section-heading-row">
+    <h3>Comptes bancaires</h3>
+    <span id="accounting-last-update"></span>
+  </div>
+  <div class="accounting-account-list" id="accounting-account-list"></div>
+
+  <div class="section-heading-row">
+    <h3>Catégories</h3>
+  </div>
+  <form class="accounting-category-manager" id="accounting-category-form">
+    <input id="accounting-category-name" type="text" placeholder="Nouvelle catégorie" autocomplete="off" required>
+    <button class="primary-button" type="submit">Ajouter</button>
+  </form>
+  <div class="accounting-category-list" id="accounting-category-list"></div>
+
+  <div class="section-heading-row">
+    <h3>Opérations masquées</h3>
+    <span id="accounting-hidden-count"></span>
+  </div>
+  <div class="accounting-hidden-operation-list" id="accounting-hidden-operation-list"></div>
+</section>
+
+<div class="accounting-summary-grid">
+  <div class="metric-card">
+    <span class="metric-label">Solde</span>
+    <strong id="accounting-total-balance">0,00 EUR</strong>
+  </div>
+</div>
+
+<section class="accounting-section">
+  <div class="section-heading-row">
+    <h3>Opérations</h3>
+  </div>
+  <div class="accounting-filter-row">
+    <input id="accounting-search-input" type="search" placeholder="Rechercher une opération" autocomplete="off">
+    <input id="accounting-period-start" type="date" aria-label="Début de période" autocomplete="off">
+    <input id="accounting-period-end" type="date" aria-label="Fin de période" autocomplete="off">
+  </div>
+  <div class="users-table-shell accounting-table-shell">
+    <table class="users-table accounting-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Tiers</th>
+          <th>Type</th>
+          <th>Catégorie</th>
+          <th>Libellé</th>
+          <th class="accounting-amount-cell">Montant</th>
+          <th aria-label="Facture">Facture</th>
+          <th>Statut</th>
+        </tr>
+      </thead>
+      <tbody id="accounting-transactions-body">
+        <tr>
+          <td colspan="8">Aucune opération chargée.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="accounting-operation-modal is-hidden" id="accounting-operation-modal" role="dialog" aria-modal="true" aria-labelledby="accounting-operation-title">
+  <div class="accounting-operation-dialog">
+    <div class="accounting-operation-header">
+      <div>
+        <span class="metric-label">Opération</span>
+        <h3 id="accounting-operation-title">Détail de l'opération</h3>
+      </div>
+      <button class="ghost-button icon-button" id="accounting-operation-close" type="button" aria-label="Fermer" title="Fermer">×</button>
+    </div>
+
+    <form id="accounting-operation-form" class="accounting-operation-form">
+      <input id="operation-id" name="transactionId" type="hidden">
+
+      <div class="accounting-operation-content">
+
+      <fieldset>
+        <legend>Identité</legend>
+        <div class="field-row">
+          <div class="field-group"><label for="operation-source-id">ID source</label><input id="operation-source-id" name="sourceId" type="text"></div>
+          <div class="field-group"><label for="operation-account">Compte bancaire</label><input id="operation-account" name="bankAccount" type="text"></div>
+          <div class="field-group"><label for="operation-bank-date">Date bancaire</label><input id="operation-bank-date" name="bankDate" type="date" readonly></div>
+          <div class="field-group"><label for="operation-accounting-date">Date comptable</label><input id="operation-accounting-date" name="date" type="date"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Montants</legend>
+        <div class="field-row">
+          <div class="field-group"><label for="operation-amount">Montant TTC</label><input id="operation-amount" name="amount" type="number" step="0.01" inputmode="decimal"></div>
+          <div class="field-group"><label for="operation-ht">HT</label><input id="operation-ht" name="amountHT" type="number" step="0.01" inputmode="decimal"></div>
+          <div class="field-group"><label for="operation-vat-rate">Taux de TVA</label><input id="operation-vat-rate" name="vatRate" type="number" step="0.01" inputmode="decimal"></div>
+          <div class="field-group"><label for="operation-vat">Montant TVA</label><input id="operation-vat" name="vatAmount" type="number" step="0.01" inputmode="decimal"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Description et classement</legend>
+        <div class="field-row">
+          <div class="field-group field-wide"><label for="operation-raw-label">Libellé bancaire brut</label><input id="operation-raw-label" name="rawLabel" type="text" readonly></div>
+          <div class="field-group field-wide"><label for="operation-label">Libellé affiché</label><input id="operation-label" name="label" type="text"></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group"><label for="operation-third-party">Tiers</label><input id="operation-third-party" name="thirdParty" type="text"></div>
+          <div class="field-group"><label for="operation-type">Type</label><select id="operation-type" name="type"><option value=""></option><option>Recette</option><option>Dépense</option><option>Virement interne</option><option>Apport</option><option>Remboursement</option><option>Cotisation</option><option>Impôt</option><option>Frais bancaire</option></select></div>
+          <div class="field-group"><label for="operation-category">Catégorie</label><div class="accounting-category-picker"><select id="operation-category" name="category"><option value="À catégoriser">À catégoriser</option></select><button id="operation-category-add" class="ghost-button" type="button" aria-label="Ajouter une catégorie" title="Ajouter une catégorie">+</button></div></div>
+        </div>
+        <div class="field-row">
+          <div class="field-group field-wide"><label for="operation-description">Description</label><textarea id="operation-description" name="description" rows="3"></textarea></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Justificatif</legend>
+        <div class="field-row">
+          <div class="field-group field-wide"><label for="operation-document-file">Importer un document</label><input id="operation-document-file" name="documentFile" type="file" accept="application/pdf,image/*"></div>
+          <div class="field-group"><label for="operation-invoice-number">N° facture / Référence</label><input id="operation-invoice-number" name="invoiceNumber" type="text"></div>
+          <div class="field-group"><label for="operation-payment-mode">Mode de paiement</label><select id="operation-payment-mode" name="paymentMode"><option value=""></option><option>Carte bancaire</option><option>Virement</option><option>Prélèvement</option><option>Espèces</option><option>Chèque</option><option>PayPal</option><option>Autre</option></select></div>
+        </div>
+      </fieldset>
+
+      </div>
+
+      <div class="accounting-operation-footer">
+        <button class="ghost-button" id="accounting-operation-hide" type="button">Ne pas afficher</button>
+        <div class="accounting-operation-submit">
+          <select id="operation-status" name="status" aria-label="Statut"><option>À vérifier</option><option>Validée</option><option>Exclue</option><option>À rapprocher</option></select>
+          <button class="primary-button" type="submit">Valider</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

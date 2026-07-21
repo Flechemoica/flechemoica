@@ -6,11 +6,15 @@ const DashboardView = (() => {
   const homeButton = document.getElementById("dashboard-home-button");
   const navItems = Array.from(document.querySelectorAll("[data-panel-target]"));
   const workspacePanels = Array.from(document.querySelectorAll(".workspace-panel"));
+  let currentProfile = null;
   const panelRoutes = {
     "overview-panel": "/",
     "users-panel": "/user.html",
     "grids-panel": "/grille.html",
     "notifications-panel": "/notifications.html",
+    "communications-panel": "/?panel=communications",
+    "social-networks-panel": "/reseaux-sociaux.html",
+    "invoicing-panel": "/facturation.html",
     "accounting-panel": "/comptabilite.html",
   };
   const routePanels = Object.fromEntries(
@@ -18,6 +22,14 @@ const DashboardView = (() => {
   );
 
   function showPanel(panelID, options = {}) {
+    if (panelID === "accounting-panel" && !canAccessAccounting()) {
+      panelID = "overview-panel";
+      options = { ...options, push: false };
+      if (window.location.pathname === "/comptabilite.html") {
+        window.history.replaceState({ panelID }, "", "/");
+      }
+    }
+
     navItems.forEach((item) => {
       item.classList.toggle("is-active", item.dataset.panelTarget === panelID);
     });
@@ -48,6 +60,33 @@ const DashboardView = (() => {
       NotificationsView.stop();
     }
 
+    if (panelID === "communications-panel") {
+      CommunicationsView.start();
+    } else {
+      CommunicationsView.stop();
+    }
+
+    if (panelID === "social-networks-panel") {
+      SocialNetworksView.start();
+    } else {
+      SocialNetworksView.stop();
+    }
+
+    if (panelID === "accounting-panel") {
+      AccountingView.start();
+    } else {
+      AccountingView.stop();
+    }
+
+    if (panelID === "invoicing-panel") {
+      InvoicingView.start();
+    } else {
+      InvoicingView.stop();
+    }
+
+    if (panelID === "overview-panel") TasksView.start();
+    else TasksView.stop();
+
     if (options.push !== false) {
       pushRoute(panelID);
     }
@@ -60,12 +99,19 @@ const DashboardView = (() => {
     UsersView.stop();
     GridsView.stop();
     NotificationsView.stop();
+    CommunicationsView.stop();
+    SocialNetworksView.stop();
+    AccountingView.stop();
+    InvoicingView.stop();
+    TasksView.stop();
   }
 
-  function showDashboard(user) {
+  function showDashboard(user, profile) {
+    currentProfile = profile || null;
     accountEmail.textContent = user.email || "";
     loginView.classList.add("is-hidden");
     dashboardView.classList.remove("is-hidden");
+    applyAccessControls();
     showPanel(getPanelFromPath(), { push: false });
   }
 
@@ -81,6 +127,11 @@ const DashboardView = (() => {
     UsersView.init();
     GridsView.init();
     NotificationsView.init();
+    CommunicationsView.init();
+    SocialNetworksView.init();
+    AccountingView.init();
+    InvoicingView.init();
+    TasksView.init();
 
     navItems.forEach((item) => {
       item.addEventListener("click", () => {
@@ -103,10 +154,29 @@ const DashboardView = (() => {
     });
   }
 
+  function canAccessAccounting() {
+    return AuthGate.hasAccountingAccess(currentProfile);
+  }
+
+  function applyAccessControls() {
+    const accountingNav = document.querySelector("[data-panel-target='accounting-panel']");
+    if (accountingNav) {
+      const canAccess = canAccessAccounting();
+      accountingNav.hidden = !canAccess;
+      accountingNav.setAttribute("aria-hidden", String(!canAccess));
+      accountingNav.classList.toggle("is-hidden", !canAccess);
+      if (!canAccess) accountingNav.classList.remove("is-active");
+    }
+  }
+
   function getPanelFromPath() {
     const requestedPanel = new URLSearchParams(window.location.search).get("panel");
     if (requestedPanel === "notifications") {
       return "notifications-panel";
+    }
+
+    if (requestedPanel === "communications") {
+      return "communications-panel";
     }
 
     if (/^\/user\/[^/]+\.html$/.test(window.location.pathname)) {
