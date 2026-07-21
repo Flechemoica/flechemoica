@@ -17,6 +17,8 @@
 	</array>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-1003964550278910~7250171720</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>GADNativeAdValidatorEnabled</key>
 	<false/>
 	<key>SKAdNetworkItems</key>

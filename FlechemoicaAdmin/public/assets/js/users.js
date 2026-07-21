@@ -105,16 +105,21 @@ const UsersView = (() => {
       }
 
       setStatus("Chargement...");
-      unsubscribe = firestore
-        .collection("users")
-        .orderBy("createdAt", "desc")
-        .onSnapshot(
-          (snapshot) => {
-            users = snapshot.docs;
-            renderUsers(filterUsers());
-            setStatus("");
-            loadAuthMetadata(snapshot.docs);
-          },
+        unsubscribe = firestore
+          .collection("users")
+          .onSnapshot(
+            (snapshot) => {
+              users = [...snapshot.docs].sort((left, right) => {
+                return (
+                  getTimestampMillis(right.data().createdAt) -
+                  getTimestampMillis(left.data().createdAt)
+                );
+              });
+
+              renderUsers(filterUsers());
+              setStatus("");
+              loadAuthMetadata(users);
+            },
           (error) => {
             setStatus(error.message || "Impossible de charger les utilisateurs.", "error");
           }

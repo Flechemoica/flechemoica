@@ -140,10 +140,12 @@ private struct NativeAdContainer: View {
             }
         }
         .onAppear {
-            Task {
-                await AdMobConfiguration.refreshTestAdsStatus()
-                loader.load(adUnitID: effectiveAdUnitID, userID: userID)
-            }
+            print("🟣 ID AdMob réellement chargé :", effectiveAdUnitID)
+
+            loader.load(
+                adUnitID: effectiveAdUnitID,
+                userID: userID
+            )
         }
     }
 }
@@ -220,12 +222,25 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
         }
     }
 
-    nonisolated func adLoader(_ adLoader: AdLoader, didFailToReceiveAdWithError error: Error) {
+    nonisolated func adLoader(
+        _ adLoader: AdLoader,
+        didFailToReceiveAdWithError error: Error
+    ) {
+        let nsError = error as NSError
+
+        print("🔴 ÉCHEC ADMOB")
+        print("🔴 Domaine :", nsError.domain)
+        print("🔴 Code :", nsError.code)
+        print("🔴 Description :", nsError.localizedDescription)
+        print("🔴 Informations :", nsError.userInfo)
+
         Task { @MainActor in
             self.nativeAd = nil
             self.isLoading = false
             self.retryCount = 0
-            self.placeholderMessage = "Annonce indisponible: \(error.localizedDescription)"
+
+            self.placeholderMessage =
+                "Annonce indisponible — code \(nsError.code) : \(nsError.localizedDescription)"
         }
     }
 }

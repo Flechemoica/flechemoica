@@ -52,13 +52,11 @@ struct FlecheMoicaApp: App {
         Analytics.logEvent("app_started", parameters: nil)
         #endif
 
-        #if canImport(GoogleMobileAds)
-        if Bundle.main.object(
-            forInfoDictionaryKey: "GADApplicationIdentifier"
-        ) != nil {
-            MobileAds.shared.start(completionHandler: nil)
-        }
-        #endif
+#if canImport(GoogleMobileAds)
+if Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") != nil {
+    MobileAds.shared.start(completionHandler: nil)
+}
+#endif
 
     }
 

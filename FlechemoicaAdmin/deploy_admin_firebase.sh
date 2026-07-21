@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="/Users/nathanpiaget/Library/Mobile Documents/com~apple~CloudDocs/flechemoica"
+REPO_DIR="/Users/nathanpiaget/Xcode/flechemoica"
 ADMIN_DIR="$REPO_DIR/FlechemoicaAdmin"
-
 PROJECT_ID="flechemoica"
 HOSTING_TARGET="admin"
-
 LOG_FILE="${TMPDIR:-/tmp}/flechemoica-deploy.log"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
@@ -49,7 +47,6 @@ deploy_firebase_admin() {
     run "${FIREBASE_CMD[@]}" projects:list --non-interactive >/dev/null
 
     log "Deploiement hosting:$HOSTING_TARGET"
-
     run "${FIREBASE_CMD[@]}" deploy \
         --project "$PROJECT_ID" \
         --only "hosting:$HOSTING_TARGET" \
@@ -66,7 +63,6 @@ deploy_github_pages() {
 
     [ -d ".git" ] || fail "Aucun depot Git trouve dans $REPO_DIR."
     [ -d "docs" ] || fail "Le dossier docs est introuvable."
-
     command -v git >/dev/null 2>&1 || fail "Git est introuvable."
 
     if [ -n "$(git status --porcelain --untracked-files=all -- docs)" ]; then
@@ -75,7 +71,6 @@ deploy_github_pages() {
 
         if ! git diff --cached --quiet -- docs; then
             COMMIT_MESSAGE="Mise a jour du site $(date '+%Y-%m-%d %H:%M:%S')"
-
             log "Creation du commit GitHub Pages"
             run git commit -m "$COMMIT_MESSAGE" -- docs
         else
@@ -98,9 +93,7 @@ deploy_github_pages() {
 
 {
     log "Debut du deploiement complet"
-
     deploy_firebase_admin
     deploy_github_pages
-
     log "Tous les deploiements sont termines avec succes"
 } 2>&1 | tee "$LOG_FILE"

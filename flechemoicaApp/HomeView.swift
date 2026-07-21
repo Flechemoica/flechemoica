@@ -380,17 +380,7 @@ struct HomeView: View {
     }
 
     private var selectedGridRequiresRewardedAd: Bool {
-        guard let selectedPublishedGrid, !selectedPublishedGrid.isUpcoming else {
-            return false
-        }
-
-        guard adPlacementConfig.isEnabled("rewardedGrid") else {
-            return false
-        }
-
-        return !selectedGridIsCurrent
-            && !isGridCompleted(selectedPublishedGrid)
-            && !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id)
+        false
     }
 
     private var selectedGridIsCompleted: Bool {
@@ -482,8 +472,6 @@ struct HomeView: View {
             gridLoadingMessage = publishedGrids.isEmpty
                 ? "Aucune grille publiee"
                 : nil
-
-            await loadCompletedPlayerCounts()
         } catch {
             let nsError = error as NSError
             gridLoadingMessage = "Erreur de chargement: \(nsError.localizedDescription)"
@@ -612,29 +600,6 @@ struct HomeView: View {
             }
     }
 
-    private func loadCompletedPlayerCounts() async {
-        let grids = publishedGrids
-        guard !grids.isEmpty else { return }
-
-        let database = Firestore.firestore()
-
-        for grid in grids {
-            do {
-                let snapshot = try await database
-                    .collection("users")
-                    .whereField("completedGridTitles", arrayContains: grid.title)
-                    .getDocuments()
-                let historicalCompletedCount = snapshot.documents.count
-
-                if let index = publishedGrids.firstIndex(where: { $0.id == grid.id }) {
-                    publishedGrids[index].completedPlayerCount = historicalCompletedCount
-                }
-            } catch {
-                continue
-            }
-        }
-    }
-
     private func showPreviousGrid() {
         guard selectedGridIndex + 1 < publishedGrids.count else { return }
         selectedGridIndex += 1
@@ -657,34 +622,7 @@ struct HomeView: View {
             return
         }
 
-        guard !selectedGridIsCurrent,
-              !isGridCompleted(selectedPublishedGrid),
-              !rewardUnlockedGridIDs.contains(selectedPublishedGrid.id) else {
-            openGrid(selectedPublishedGrid)
-            return
-        }
-
-        guard adPlacementConfig.isEnabled("rewardedGrid") else {
-            openGrid(selectedPublishedGrid)
-            return
-        }
-
-        Task {
-            await rewardedGridAccessAd.showAd(
-                adUnitID: "ca-app-pub-1003964550278910/8860825770",
-                userID: user.uid,
-                customData: "grid_\(selectedPublishedGrid.id)"
-            ) { earnedReward in
-                guard earnedReward else {
-                    gridAccessMessage = "Regarde la pub jusqu'au bout pour debloquer cette grille."
-                    return
-                }
-
-                rewardUnlockedGridIDs.insert(selectedPublishedGrid.id)
-                persistUnlockedGrid(id: selectedPublishedGrid.id)
-                openGrid(selectedPublishedGrid)
-            }
-        }
+        openGrid(selectedPublishedGrid)
     }
 
     @MainActor
@@ -906,7 +844,8 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
         productionAdUnitID = adUnitID
         statsUserID = userID
         message = nil
-
+        print("🎬 Rewarded AdMob ID réellement chargé : \(effectiveAdUnitID)")
+        
         do {
             let ad = try await loadAdIfNeeded(customData: customData)
             guard let rootViewController = UIApplication.shared.activeRootViewController else {
@@ -923,7 +862,18 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
                 }
             }
         } catch {
-            message = "Pub indisponible: \(error.localizedDescription)"
+            let nsError = error as NSError
+
+            print(
+                "❌ Rewarded AdMob error domain=\(nsError.domain) code=\(nsError.code) message=\(nsError.localizedDescription)"
+            )
+
+            if nsError.code == 1 {
+                message = "Aucune publicité disponible pour le moment. Réessaie dans quelques instants."
+            } else {
+                message = "Pub indisponible: \(nsError.localizedDescription)"
+            }
+
             rewarded(false)
         }
         #else
@@ -945,8 +895,6 @@ private final class RewardedGridAccessAd: NSObject, ObservableObject {
     private func loadAd(customData: String, retryCount: Int = 2) async throws -> RewardedAd {
         isLoading = true
         defer { isLoading = false }
-
-        await AdMobConfiguration.refreshTestAdsStatus()
 
         do {
             let ad = try await RewardedAd.load(with: effectiveAdUnitID, request: Request())
@@ -1084,14 +1032,14 @@ private struct CrosswordGrid {
     init?(firestoreData: [String: Any], fallbackTitle: String) {
         let payload: [String: Any]?
 
-        if let gridMap = firestoreData["grid"] as? [String: Any] {
+        if firestoreData["placedWords"] != nil {
+            payload = firestoreData
+        } else if let gridMap = firestoreData["grid"] as? [String: Any] {
             payload = gridMap
         } else if let gridJSON = firestoreData["grid"] as? String,
                   let data = gridJSON.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             payload = object
-        } else if firestoreData["placedWords"] != nil {
-            payload = firestoreData
         } else {
             payload = nil
         }
@@ -2362,6 +2310,17 @@ private struct GridGameContent: View {
     private var selectedWord: CrosswordWord? {
         isCompleted ? nil : grid.crosswordGrid?.word(id: selectedWordID)
     }
+    
+    private var activeInputCoordinate: GridCoordinate? {
+        guard
+            let selectedWord,
+            selectedWord.letterCoordinates.indices.contains(inputIndex)
+        else {
+            return selectedCell
+        }
+
+        return selectedWord.letterCoordinates[inputIndex]
+    }
 
     private var completionStatusText: String {
         guard let completedAt else { return "Grille terminée" }
@@ -2428,7 +2387,8 @@ private struct GridGameContent: View {
                     isKeyboardVisible: isKeyboardVisible,
                     selectedWordID: $selectedWordID,
                     selectedCell: $selectedCell,
-                    inputIndex: $inputIndex
+                    inputIndex: $inputIndex,
+                    activeInputCoordinate: activeInputCoordinate
                 )
                 .frame(
                     maxWidth: .infinity,
@@ -2488,7 +2448,8 @@ private struct GridGameContent: View {
                         backspace: erasePreviousLetter,
                         closeKeyboard: closeKeyboard
                     )
-                    .frame(width: 0, height: 0)
+                    .frame(width: 2, height: 2)
+                    .opacity(0.01)
                 }
             } else {
                 VStack(spacing: 8) {
@@ -2745,13 +2706,41 @@ private struct GridGameContent: View {
         Task {
             do {
                 let database = Firestore.firestore()
-                try await database.collection("users").document(userID).setData([
-                    "completedGrids": [safeGridStorageKey: completedPayload],
-                    "completedGridTitles": FieldValue.arrayUnion([grid.title]),
-                    "gridTimers": [safeGridStorageKey: elapsedSeconds],
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], merge: true)
+                let userRef = database.collection("users").document(userID)
+                let gridRef = database.collection("grids").document(grid.id)
+
+                _ = try await database.runTransaction { transaction, errorPointer -> Any? in
+                    let userSnapshot: DocumentSnapshot
+                    do {
+                        userSnapshot = try transaction.getDocument(userRef)
+                    } catch let fetchError as NSError {
+                        errorPointer?.pointee = fetchError
+                        return nil
+                    }
+
+                    let alreadyCompleted = (userSnapshot.data()?["completedGridTitles"] as? [String])?
+                        .contains(grid.title) == true
+
+                    transaction.setData([
+                        "completedGrids": [safeGridStorageKey: completedPayload],
+                        "completedGridTitles": FieldValue.arrayUnion([grid.title]),
+                        "gridTimers": [safeGridStorageKey: elapsedSeconds],
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: userRef, merge: true)
+
+                    // On n'incrémente le compteur partagé que la toute première fois
+                    // que ce joueur termine cette grille, pour éviter de le compter
+                    // plusieurs fois (rejouer, réinstaller l'app, etc).
+                    if !alreadyCompleted {
+                        transaction.updateData([
+                            "completedPlayerCount": FieldValue.increment(Int64(1))
+                        ], forDocument: gridRef)
+                    }
+
+                    return nil
+                }
             } catch {
+                print("Erreur persistCompletedGrid pour \(userID) / \(grid.title):", error.localizedDescription)
                 return
             }
         }
@@ -3132,6 +3121,7 @@ private struct CrosswordBoardViewport: View {
     @Binding var selectedWordID: String?
     @Binding var selectedCell: GridCoordinate?
     @Binding var inputIndex: Int
+    let activeInputCoordinate: GridCoordinate?
 
     private let cellSize: CGFloat = 38
     private var rowToCenter: Int? {
@@ -3187,7 +3177,8 @@ private struct CrosswordBoardViewport: View {
                             isReadOnly: isReadOnly,
                             selectedWordID: $selectedWordID,
                             selectedCell: $selectedCell,
-                            inputIndex: $inputIndex
+                            inputIndex: $inputIndex,
+                            activeInputCoordinate: activeInputCoordinate
                         )
                         .frame(
                             width: boardWidth,
@@ -3250,6 +3241,7 @@ private struct CrosswordBoard: View {
     @Binding var selectedWordID: String?
     @Binding var selectedCell: GridCoordinate?
     @Binding var inputIndex: Int
+    let activeInputCoordinate: GridCoordinate?
 
     private var selectedWord: CrosswordWord? {
         isReadOnly ? nil : grid.word(id: selectedWordID)
@@ -3281,6 +3273,7 @@ private struct CrosswordBoard: View {
                             isBlack: grid.blackCells.contains(coordinate),
                             isReadOnly: isReadOnly,
                             cellSize: cellSize,
+                            activeInputCoordinate: activeInputCoordinate,
                             selectWord: selectWord,
                             selectCell: selectCell
                         )
@@ -3326,18 +3319,19 @@ private struct CrosswordCell: View {
     let isBlack: Bool
     let isReadOnly: Bool
     let cellSize: CGFloat
+    let activeInputCoordinate: GridCoordinate?
     let selectWord: (CrosswordWord) -> Void
     let selectCell: (GridCoordinate) -> Void
-
+    
     private var isDefinition: Bool {
         !definitionWords.isEmpty
     }
-
+    
     var body: some View {
         ZStack {
             Rectangle()
                 .fill(backgroundColor)
-
+            
             if isDefinition {
                 VStack(spacing: 0) {
                     ForEach(definitionWords) { word in
@@ -3367,192 +3361,224 @@ private struct CrosswordCell: View {
         .zIndex(isDefinition ? 2 : 0)
         .overlay(Rectangle().stroke(Color.black.opacity(0.72), lineWidth: 0.8))
     }
-
+    
     private var backgroundColor: Color {
+        
+        let green = Color(
+            red: 185 / 255,
+            green: 243 / 255,
+            blue: 173 / 255
+        )
+        
+        let yellow = Color(
+            red: 243 / 255,
+            green: 231 / 255,
+            blue: 173 / 255
+        )
+        
         if isBlack {
             return .black
         }
-
-        if isDefinition {
-            return Color(red: 193 / 255, green: 174 / 255, blue: 238 / 255)
-        }
-
+        
         if isWrong {
             return Color(red: 1.0, green: 0.55, blue: 0.52)
         }
-
-        return isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74) : .white
-    }
-}
-
-private struct DefinitionCellSegment: View {
-    let word: CrosswordWord
-    let segmentCount: Int
-    let isSelected: Bool
-    let isReadOnly: Bool
-    let action: () -> Void
-
-    private var definitionText: String {
-        let text = word.definitions.joined(separator: " / ").uppercased()
-        return text.isEmpty ? " " : text
-    }
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                Text(definitionText)
-                    .font(.xpTahoma(size: segmentCount > 1 ? 5.5 : 6.4, weight: .bold))
-                    .foregroundStyle(.black)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(segmentCount > 1 ? 3 : 4)
-                    .minimumScaleFactor(0.42)
-                    .padding(.horizontal, 2)
-                    .padding(.vertical, 3)
-
-                DefinitionArrowView(style: word.arrowStyle)
+        
+        // case définition sélectionnée
+        if isDefinition {
+            if definitionWords.contains(where: { $0.id == selectedWordID }) {
+                return yellow
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74).opacity(0.72) : Color.clear)
-            .contentShape(Rectangle())
+            
+            return Color(
+                red: 193 / 255,
+                green: 174 / 255,
+                blue: 238 / 255
+            )
         }
-        .buttonStyle(.plain)
-        .disabled(isReadOnly)
-        .overlay(Rectangle().stroke(Color.black.opacity(isSelected ? 0.55 : 0.18), lineWidth: isSelected ? 1 : 0.5))
+        
+        // lettre actuellement en saisie
+        if coordinate == activeInputCoordinate {
+            return green
+        }
+        
+        // reste du mot sélectionné
+        if isSelected {
+            return yellow
+        }
+        
+        return .white
     }
-}
-
-private struct DefinitionArrowView: View {
-    let style: DefinitionArrowStyle
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let height = proxy.size.height
-
-            let arrowSize = width * 0.14
-            let lineWidth: CGFloat = 1.1
-
-            ZStack {
-
-                // ===== Traits =====
-
-                Path { path in
-                    switch style {
-
-                    case .right:
-                        let y = height * 0.5
-                        let startX = width
-                        let tipX = width + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: startX, y: y))
-                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y))
-
-                    case .down:
-                        let x = width * 0.5
-                        let startY = height
-                        let tipY = height + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: x, y: startY))
-                        path.addLine(to: CGPoint(x: x, y: tipY - arrowSize))
-
-                    case .cornerDownRight:
-                        let startX = width
-                        let startY = height * 0.5
-
-                        let elbowX = startX + arrowSize * 1
-                        let elbowY = startY
-
-                        let tipX = elbowX
-                        let tipY = elbowY + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: startX, y: elbowY))
-                        path.addLine(to: CGPoint(x: elbowX, y: elbowY))
-                        path.addLine(to: CGPoint(x: elbowX, y: tipY - arrowSize))
-
-                    case .cornerRightDown:
-                        let startX = width * 0.5
-                        let startY = height
-
-                        let elbowX = startX
-                        let elbowY = startY + arrowSize * 1
-
-                        let tipX = elbowX + arrowSize * 1.6
-                        let tipY = elbowY
-
-                        path.move(to: CGPoint(x: startX, y: startY))
-                        path.addLine(to: CGPoint(x: elbowX, y: elbowY))
-                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: tipY))
-                    }
+    
+    private struct DefinitionCellSegment: View {
+        let word: CrosswordWord
+        let segmentCount: Int
+        let isSelected: Bool
+        let isReadOnly: Bool
+        let action: () -> Void
+        
+        private var definitionText: String {
+            let text = word.definitions.joined(separator: " / ").uppercased()
+            return text.isEmpty ? " " : text
+        }
+        
+        var body: some View {
+            Button(action: action) {
+                ZStack {
+                    Text(definitionText)
+                        .font(.xpTahoma(size: segmentCount > 1 ? 5.5 : 6.4, weight: .bold))
+                        .foregroundStyle(.black)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(segmentCount > 1 ? 3 : 4)
+                        .minimumScaleFactor(0.42)
+                        .padding(.horizontal, 2)
+                        .padding(.vertical, 3)
+                    
+                    DefinitionArrowView(style: word.arrowStyle)
                 }
-                .stroke(
-                    Color.black,
-                    style: StrokeStyle(
-                        lineWidth: lineWidth,
-                        lineCap: .round,
-                        lineJoin: .round
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74).opacity(0.72) : Color.clear)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isReadOnly)
+            .overlay(Rectangle().stroke(Color.black.opacity(isSelected ? 0.55 : 0.18), lineWidth: isSelected ? 1 : 0.5))
+        }
+    }
+    
+    private struct DefinitionArrowView: View {
+        let style: DefinitionArrowStyle
+        
+        var body: some View {
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let height = proxy.size.height
+                
+                let arrowSize = width * 0.14
+                let lineWidth: CGFloat = 1.1
+                
+                ZStack {
+                    
+                    // ===== Traits =====
+                    
+                    Path { path in
+                        switch style {
+                            
+                        case .right:
+                            let y = height * 0.5
+                            let startX = width
+                            let tipX = width + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: startX, y: y))
+                            path.addLine(to: CGPoint(x: tipX - arrowSize, y: y))
+                            
+                        case .down:
+                            let x = width * 0.5
+                            let startY = height
+                            let tipY = height + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: x, y: startY))
+                            path.addLine(to: CGPoint(x: x, y: tipY - arrowSize))
+                            
+                        case .cornerDownRight:
+                            let startX = width
+                            let startY = height * 0.5
+                            
+                            let elbowX = startX + arrowSize * 1
+                            let elbowY = startY
+                            
+                            let tipX = elbowX
+                            let tipY = elbowY + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: startX, y: elbowY))
+                            path.addLine(to: CGPoint(x: elbowX, y: elbowY))
+                            path.addLine(to: CGPoint(x: elbowX, y: tipY - arrowSize))
+                            
+                        case .cornerRightDown:
+                            let startX = width * 0.5
+                            let startY = height
+                            
+                            let elbowX = startX
+                            let elbowY = startY + arrowSize * 1
+                            
+                            let tipX = elbowX + arrowSize * 1.6
+                            let tipY = elbowY
+                            
+                            path.move(to: CGPoint(x: startX, y: startY))
+                            path.addLine(to: CGPoint(x: elbowX, y: elbowY))
+                            path.addLine(to: CGPoint(x: tipX - arrowSize, y: tipY))
+                        }
+                    }
+                    .stroke(
+                        Color.black,
+                        style: StrokeStyle(
+                            lineWidth: lineWidth,
+                            lineCap: .round,
+                            lineJoin: .round
+                        )
                     )
-                )
-
-                // ===== Pointes pleines =====
-
-                Path { path in
-                    switch style {
-
-                    case .right:
-                        let y = height * 0.5
-                        let tipX = width + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: tipX, y: y))
-                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y - arrowSize * 0.45))
-                        path.addLine(to: CGPoint(x: tipX - arrowSize, y: y + arrowSize * 0.45))
-                        path.closeSubpath()
-                    case .down:
-                        let x = width * 0.5
-                        let tipY = height + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: x, y: tipY))
-                        path.addLine(to: CGPoint(x: x - arrowSize * 0.45, y: tipY - arrowSize))
-                        path.addLine(to: CGPoint(x: x + arrowSize * 0.45, y: tipY - arrowSize))
-                        path.closeSubpath()
-
-                    case .cornerDownRight:
-                        let elbowX = width + arrowSize * 1
-
-                        let elbowY = height * 0.5
-
-                        let tipY = elbowY + arrowSize * 1.6
-
-                        path.move(to: CGPoint(x: elbowX, y: tipY))
-                        path.addLine(to: CGPoint(x: elbowX - arrowSize * 0.45, y: tipY - arrowSize))
-                        path.addLine(to: CGPoint(x: elbowX + arrowSize * 0.45, y: tipY - arrowSize))
-                        path.closeSubpath()
-
-                    case .cornerRightDown:
-                        let startX = width * 0.5
-                        let startY = height
-
-                        let elbowX = startX
-                        let elbowY = startY + arrowSize * 1
-
-                        let tipX = elbowX + arrowSize * 1.6
-                        let tipY = elbowY
-
-                        path.move(to: CGPoint(x: tipX, y: tipY))
-                        path.addLine(to: CGPoint(
-                            x: tipX - arrowSize,
-                            y: tipY - arrowSize * 0.45
-                        ))
-                        path.addLine(to: CGPoint(
-                            x: tipX - arrowSize,
-                            y: tipY + arrowSize * 0.45
-                        ))
-                        path.closeSubpath()
+                    
+                    // ===== Pointes pleines =====
+                    
+                    Path { path in
+                        switch style {
+                            
+                        case .right:
+                            let y = height * 0.5
+                            let tipX = width + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: tipX, y: y))
+                            path.addLine(to: CGPoint(x: tipX - arrowSize, y: y - arrowSize * 0.45))
+                            path.addLine(to: CGPoint(x: tipX - arrowSize, y: y + arrowSize * 0.45))
+                            path.closeSubpath()
+                        case .down:
+                            let x = width * 0.5
+                            let tipY = height + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: x, y: tipY))
+                            path.addLine(to: CGPoint(x: x - arrowSize * 0.45, y: tipY - arrowSize))
+                            path.addLine(to: CGPoint(x: x + arrowSize * 0.45, y: tipY - arrowSize))
+                            path.closeSubpath()
+                            
+                        case .cornerDownRight:
+                            let elbowX = width + arrowSize * 1
+                            
+                            let elbowY = height * 0.5
+                            
+                            let tipY = elbowY + arrowSize * 1.6
+                            
+                            path.move(to: CGPoint(x: elbowX, y: tipY))
+                            path.addLine(to: CGPoint(x: elbowX - arrowSize * 0.45, y: tipY - arrowSize))
+                            path.addLine(to: CGPoint(x: elbowX + arrowSize * 0.45, y: tipY - arrowSize))
+                            path.closeSubpath()
+                            
+                        case .cornerRightDown:
+                            let startX = width * 0.5
+                            let startY = height
+                            
+                            let elbowX = startX
+                            let elbowY = startY + arrowSize * 1
+                            
+                            let tipX = elbowX + arrowSize * 1.6
+                            let tipY = elbowY
+                            
+                            path.move(to: CGPoint(x: tipX, y: tipY))
+                            path.addLine(to: CGPoint(
+                                x: tipX - arrowSize,
+                                y: tipY - arrowSize * 0.45
+                            ))
+                            path.addLine(to: CGPoint(
+                                x: tipX - arrowSize,
+                                y: tipY + arrowSize * 0.45
+                            ))
+                            path.closeSubpath()
+                        }
                     }
+                    .fill(Color.black)
                 }
-                .fill(Color.black)
             }
+            .allowsHitTesting(false)
         }
-        .allowsHitTesting(false)
     }
 }
 
@@ -3561,7 +3587,7 @@ private struct NativeKeyboardInput: UIViewRepresentable {
     let typeLetter: (String) -> Void
     let backspace: () -> Void
     let closeKeyboard: () -> Void
-
+    
     func makeUIView(context: Context) -> KeyboardTextField {
         let textField = KeyboardTextField()
         textField.keyboardType = .asciiCapable
@@ -3578,22 +3604,38 @@ private struct NativeKeyboardInput: UIViewRepresentable {
         textField.backgroundColor = .clear
         textField.delegate = context.coordinator
         textField.deleteBackwardHandler = backspace
+        textField.isUserInteractionEnabled = true
         return textField
     }
-
+    
     func updateUIView(_ uiView: KeyboardTextField, context: Context) {
         context.coordinator.typeLetter = typeLetter
         context.coordinator.backspace = backspace
         context.coordinator.closeKeyboard = closeKeyboard
         uiView.deleteBackwardHandler = backspace
-
-        if isActive, !uiView.isFirstResponder {
-            uiView.becomeFirstResponder()
-        } else if !isActive, uiView.isFirstResponder {
+        
+        if isActive {
+            openKeyboard(uiView)
+        } else if uiView.isFirstResponder {
             uiView.resignFirstResponder()
         }
     }
-
+    
+    private func openKeyboard(_ textField: KeyboardTextField) {
+        DispatchQueue.main.async {
+            guard textField.window != nil else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    openKeyboard(textField)
+                }
+                return
+            }
+            
+            if !textField.isFirstResponder {
+                textField.becomeFirstResponder()
+            }
+        }
+    }
+    
     func makeCoordinator() -> Coordinator {
         Coordinator(
             typeLetter: typeLetter,
@@ -3601,12 +3643,12 @@ private struct NativeKeyboardInput: UIViewRepresentable {
             closeKeyboard: closeKeyboard
         )
     }
-
+    
     final class Coordinator: NSObject, UITextFieldDelegate {
         var typeLetter: (String) -> Void
         var backspace: () -> Void
         var closeKeyboard: () -> Void
-
+        
         init(
             typeLetter: @escaping (String) -> Void,
             backspace: @escaping () -> Void,
@@ -3616,7 +3658,7 @@ private struct NativeKeyboardInput: UIViewRepresentable {
             self.backspace = backspace
             self.closeKeyboard = closeKeyboard
         }
-
+        
         func textField(
             _ textField: UITextField,
             shouldChangeCharactersIn range: NSRange,
@@ -3629,19 +3671,19 @@ private struct NativeKeyboardInput: UIViewRepresentable {
             } else if let character = string.uppercased().first, character.isLetter {
                 typeLetter(String(character))
             }
-
+            
             textField.text = ""
             return false
         }
     }
-
+    
     final class KeyboardTextField: UITextField {
         var deleteBackwardHandler: (() -> Void)?
-
+        
         override var textInputContextIdentifier: String? {
             nil
         }
-
+        
         override func deleteBackward() {
             deleteBackwardHandler?()
             super.deleteBackward()
@@ -3654,11 +3696,11 @@ private struct ProfileSummaryCard: View {
     let avatarName: String
     let isEditor: Bool
     var eyebrow = "Bienvenue"
-
+    
     var body: some View {
         HStack(spacing: 14) {
             AvatarBadge(name: avatarName)
-
+            
             VStack(alignment: .leading, spacing: 5) {
                 Text(eyebrow)
                     .font(.custom("Tahoma", size: 13))
@@ -3668,13 +3710,13 @@ private struct ProfileSummaryCard: View {
                         .font(.xpTahoma(size: 22, weight: .bold))
                         .foregroundStyle(.black)
                         .lineLimit(1)
-
+                    
                     if isEditor {
                         EditorBadge()
                     }
                 }
             }
-
+            
             Spacer(minLength: 0)
         }
         .padding(14)
@@ -3691,111 +3733,111 @@ private struct PublicProfileContent: View {
     let backAction: () -> Void
     var settingsAction: (() -> Void)? = nil
     var contactAction: () -> Void
-
-
+    
+    
     var body: some View {
         ZStack {
             VStack(spacing: 18) {
-            ZStack(alignment: .topTrailing) {
-                VStack(spacing: 12) {
-                    AvatarBadge(name: avatarName, size: 112)
-
-                    VStack(spacing: 6) {
-                        HStack(spacing: 8) {
-                            Text(displayName)
-                                .font(.xpTahoma(size: 24, weight: .bold))
-                                .foregroundStyle(.black)
-                                .lineLimit(1)
-
-                            if isEditor {
-                                EditorBadge()
+                ZStack(alignment: .topTrailing) {
+                    VStack(spacing: 12) {
+                        AvatarBadge(name: avatarName, size: 112)
+                        
+                        VStack(spacing: 6) {
+                            HStack(spacing: 8) {
+                                Text(displayName)
+                                    .font(.xpTahoma(size: 24, weight: .bold))
+                                    .foregroundStyle(.black)
+                                    .lineLimit(1)
+                                
+                                if isEditor {
+                                    EditorBadge()
+                                }
                             }
+                            
                         }
-
                     }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(18)
-
-                VStack(spacing: 8) {
-                    XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Retour", action: backAction)
-
-                    if let settingsAction {
-                        XPToolbarIconButton(systemName: "gearshape.fill", accessibilityLabel: "Reglages du profil", action: settingsAction)
-                        XPToolbarIconButton(text: "?", accessibilityLabel: "Contacter le support", action: contactAction)
+                    .frame(maxWidth: .infinity)
+                    .padding(18)
+                    
+                    VStack(spacing: 8) {
+                        XPToolbarIconButton(systemName: "arrow.left", accessibilityLabel: "Retour", action: backAction)
+                        
+                        if let settingsAction {
+                            XPToolbarIconButton(systemName: "gearshape.fill", accessibilityLabel: "Reglages du profil", action: settingsAction)
+                            XPToolbarIconButton(text: "?", accessibilityLabel: "Contacter le support", action: contactAction)
+                        }
                     }
+                    .padding(8)
                 }
-                .padding(8)
-            }
-            .background(Color.xpPanel)
-            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Grilles terminées")
-                    .font(.custom("Tahoma", size: 13))
-                    .foregroundStyle(.black.opacity(0.7))
-
-                if completedGridTitles.isEmpty {
-                    Text("Aucune grille terminée")
-                        .font(.xpTahoma(size: 15, weight: .bold))
-                        .foregroundStyle(.black)
-                } else {
-                    ForEach(completedGridTitles, id: \.self) { title in
-                        Text(title)
+                .background(Color.xpPanel)
+                .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Grilles terminées")
+                        .font(.custom("Tahoma", size: 13))
+                        .foregroundStyle(.black.opacity(0.7))
+                    
+                    if completedGridTitles.isEmpty {
+                        Text("Aucune grille terminée")
                             .font(.xpTahoma(size: 15, weight: .bold))
                             .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(Color.white.opacity(0.45))
-                            .overlay(Rectangle().stroke(Color.black.opacity(0.22), lineWidth: 1))
+                    } else {
+                        ForEach(completedGridTitles, id: \.self) { title in
+                            Text(title)
+                                .font(.xpTahoma(size: 15, weight: .bold))
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color.white.opacity(0.45))
+                                .overlay(Rectangle().stroke(Color.black.opacity(0.22), lineWidth: 1))
+                        }
                     }
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.xpPanel)
+                .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+                
+                Spacer(minLength: 0)
             }
             .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.xpPanel)
-            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
-
-            Spacer(minLength: 0)
-        }
-        .padding(14)
         }
     }
 }
 
 private struct ProfileInfoWindow: View {
     let closeAction: () -> Void
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Informations")
                     .font(.xpTahoma(size: 18, weight: .bold))
                     .foregroundStyle(.black)
-
+                
                 Spacer(minLength: 0)
-
+                
                 Button("X", action: closeAction)
                     .buttonStyle(XPButtonStyle(foregroundColor: .red))
                     .frame(width: 42)
             }
-
+            
             VStack(alignment: .leading, spacing: 8) {
                 Text("Flèche-moi ça")
                     .font(.xpTahoma(size: 15, weight: .bold))
                     .foregroundStyle(.black)
-
+                
                 Text("Les profils publics affichent le pseudo, l'avatar, le statut Éditeur quand il existe, et les grilles terminées. Les données privées du compte restent dans ton espace utilisateur.")
                     .font(.custom("Tahoma", size: 13))
                     .foregroundStyle(.black.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
-
+                
                 Text("Pour toute question légale, confidentialité ou suppression de données, contacte-nous par e-mail.")
                     .font(.custom("Tahoma", size: 13))
                     .foregroundStyle(.black.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
             }
-
+            
             Button("Nous contacter", action: openContactMail)
                 .buttonStyle(XPButtonStyle())
                 .frame(maxWidth: .infinity)
@@ -3806,7 +3848,7 @@ private struct ProfileInfoWindow: View {
         .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
         .shadow(color: .black.opacity(0.32), radius: 8, x: 0, y: 5)
     }
-
+    
     private func openContactMail() {
         guard let url = URL(string: "mailto:contact@flechemoica.fr") else { return }
         UIApplication.shared.open(url)
@@ -3815,7 +3857,7 @@ private struct ProfileInfoWindow: View {
 
 private struct ProfileSettingsContent: View {
     private static let avatarNames = ["01", "02", "03", "04", "05", "06", "07", "08", "09"]
-
+    
     let user: User
     let initialDisplayName: String
     let initialEmail: String
@@ -3824,14 +3866,14 @@ private struct ProfileSettingsContent: View {
     let userChanged: (User) -> Void
     let deletingAccountChanged: (Bool) -> Void
     let signedOut: () -> Void
-
+    
     private enum SettingsPanel: Identifiable {
         case displayName
         case avatar
         case email
         case password
         case deleteAccount
-
+        
         var id: String {
             switch self {
             case .displayName: return "displayName"
@@ -3841,7 +3883,7 @@ private struct ProfileSettingsContent: View {
             case .deleteAccount: return "deleteAccount"
             }
         }
-
+        
         var title: String {
             switch self {
             case .displayName: return "Modifier le pseudo"
@@ -3852,7 +3894,7 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     @State private var displayName: String
     @State private var selectedAvatarIndex: Int
     @State private var savedDisplayName: String
@@ -3867,7 +3909,7 @@ private struct ProfileSettingsContent: View {
     @State private var isShowingDeleteConfirmation = false
     @State private var activePanel: SettingsPanel?
     @State private var appleSignInCoordinator: ProfileAppleSignInCoordinator?
-
+    
     init(
         user: User,
         initialDisplayName: String,
@@ -3892,70 +3934,70 @@ private struct ProfileSettingsContent: View {
         _savedEmail = State(initialValue: initialEmail)
         _savedAvatarName = State(initialValue: initialAvatarName)
     }
-
+    
     private var trimmedDisplayName: String {
         displayName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
+    
     private var displayNameKey: String {
         trimmedDisplayName.lowercased()
     }
-
+    
     private var savedDisplayNameKey: String {
         savedDisplayName.lowercased()
     }
-
+    
     private var selectedAvatarName: String {
         Self.avatarNames[selectedAvatarIndex]
     }
-
+    
     private var selectedAvatarID: String {
         "\(selectedAvatarName).png"
     }
-
+    
     private var selectedAvatarURL: URL? {
         URL(string: "flechemoica-avatar://\(selectedAvatarID)")
     }
-
+    
     private var hasAccountChanges: Bool {
         displayNameKey != savedDisplayNameKey
     }
-
+    
     private var hasAvatarChanges: Bool {
         selectedAvatarName != savedAvatarName
     }
-
+    
     private var wantsPasswordChange: Bool {
         !newPassword.isEmpty || !confirmPassword.isEmpty
     }
-
+    
     private var trimmedNewEmail: String {
         newEmail.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-
+    
     private var canChangeEmail: Bool {
         !isSubmitting
-            && currentPassword.count >= 6
-            && trimmedNewEmail.contains("@")
-            && trimmedNewEmail.lowercased() != savedEmail.lowercased()
+        && currentPassword.count >= 6
+        && trimmedNewEmail.contains("@")
+        && trimmedNewEmail.lowercased() != savedEmail.lowercased()
     }
-
+    
     private var canSave: Bool {
         guard !isSubmitting else { return false }
         guard !trimmedDisplayName.isEmpty else { return false }
         guard hasAccountChanges || hasAvatarChanges || wantsPasswordChange else { return false }
-
+        
         if wantsPasswordChange {
             return currentPassword.count >= 6 && newPassword.count >= 6 && newPassword == confirmPassword
         }
-
+        
         return true
     }
-
+    
     private var isAppleAccount: Bool {
         user.providerData.contains { $0.providerID == "apple.com" }
     }
-
+    
     private var appVersionText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
@@ -3965,14 +4007,14 @@ private struct ProfileSettingsContent: View {
         } else {
             visibleVersion = "1.0"
         }
-
+        
         if let build, !build.isEmpty, build != visibleVersion {
             return "Version \(visibleVersion) (\(build))"
         }
-
+        
         return "Version \(visibleVersion)"
     }
-
+    
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -3999,7 +4041,7 @@ private struct ProfileSettingsContent: View {
                             }
                         }
                         .settingsPanel()
-
+                        
                         VStack(alignment: .leading, spacing: 14) {
                             SettingsSectionTitle("Confidentialité")
                             SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
@@ -4007,9 +4049,9 @@ private struct ProfileSettingsContent: View {
                             }
                         }
                         .settingsPanel()
-
+                        
                         appVersionBadge
-
+                        
                         if !statusText.isEmpty {
                             Text(statusText)
                                 .font(.custom("Tahoma", size: 13))
@@ -4019,7 +4061,7 @@ private struct ProfileSettingsContent: View {
                                 .padding(.top, 4)
                         }
                     }
-
+                    
                     Button("Déconnexion") {
                         signOutTapped()
                     }
@@ -4027,10 +4069,10 @@ private struct ProfileSettingsContent: View {
                     .disabled(isSubmitting)
                 }
                 .padding(14)
-
+                
                 SettingsLegalFooter()
             }
-
+            
             if let activePanel {
                 SettingsDetailWindow(title: activePanel.title) {
                     self.activePanel = nil
@@ -4038,7 +4080,7 @@ private struct ProfileSettingsContent: View {
                     panelContent(for: activePanel)
                 }
             }
-
+            
             if isShowingDeleteConfirmation {
                 DeleteAccountConfirmationWindow(
                     cancelAction: {
@@ -4052,14 +4094,14 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private var appVersionBadge: some View {
         Text(appVersionText)
             .font(.custom("Tahoma", size: 12))
             .foregroundStyle(.black.opacity(0.62))
             .frame(maxWidth: .infinity, alignment: .center)
     }
-
+    
     @ViewBuilder
     private func panelContent(for panel: SettingsPanel) -> some View {
         switch panel {
@@ -4117,7 +4159,7 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func savePanelButton(title: String) -> some View {
         Button(isSubmitting ? "Enregistrement..." : title) {
             saveTapped()
@@ -4127,42 +4169,42 @@ private struct ProfileSettingsContent: View {
         .disabled(!canSave)
         .frame(maxWidth: .infinity)
     }
-
+    
     private func saveTapped() {
         guard canSave else {
             statusText = "Verifie les champs avant d'enregistrer."
             return
         }
-
+        
         isSubmitting = true
         statusText = "Enregistrement..."
-
+        
         Task {
             do {
                 try await validateProfileAvailability()
-
+                
                 if wantsPasswordChange {
                     try await reauthenticateUser()
                 }
-
+                
                 if hasAccountChanges || hasAvatarChanges {
                     let request = user.createProfileChangeRequest()
                     request.displayName = trimmedDisplayName
                     request.photoURL = selectedAvatarURL
                     try await request.commitChanges()
                 }
-
+                
                 if wantsPasswordChange {
                     try await user.updatePassword(to: newPassword)
                 }
-
+                
                 let currentEmail = Auth.auth().currentUser?.email ?? savedEmail
                 try await saveUserDocument(
                     email: currentEmail,
                     emailKey: currentEmail.lowercased()
                 )
                 try await user.reload()
-
+                
                 await MainActor.run {
                     isSubmitting = false
                     savedDisplayName = trimmedDisplayName
@@ -4182,21 +4224,21 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func changeEmailTapped() {
         guard canChangeEmail else {
             statusText = "Verifie le nouvel e-mail et l'ancien mot de passe."
             return
         }
-
+        
         isSubmitting = true
         statusText = "Changement de l'e-mail..."
-
+        
         Task {
             do {
                 try await reauthenticateUser()
                 try await user.sendEmailVerification(beforeUpdatingEmail: trimmedNewEmail)
-
+                
                 await MainActor.run {
                     isSubmitting = false
                     newEmail = ""
@@ -4211,17 +4253,17 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func requestAccountDeletionConfirmation() {
         guard isAppleAccount || currentPassword.count >= 6 else {
             statusText = "Entre ton ancien mot de passe avant de supprimer le compte."
             return
         }
-
+        
         statusText = ""
         isShowingDeleteConfirmation = true
     }
-
+    
     private func signOutTapped() {
         do {
             try Auth.auth().signOut()
@@ -4230,22 +4272,22 @@ private struct ProfileSettingsContent: View {
             statusText = firebaseMessage(for: error)
         }
     }
-
+    
     private func deleteAccountTapped() {
         guard isAppleAccount || currentPassword.count >= 6 else {
             statusText = "Entre ton ancien mot de passe pour supprimer le compte."
             return
         }
-
+        
         isSubmitting = true
         statusText = "Suppression du compte..."
         deletingAccountChanged(true)
-
+        
         Task {
             var appleAuthorizationCode: String?
             var firebaseDeletionIDToken: String?
             var shouldForceSignOut = false
-
+            
             do {
                 if isAppleAccount {
                     let appleDeletionContext = try await appleDeletionContext()
@@ -4254,19 +4296,19 @@ private struct ProfileSettingsContent: View {
                 } else {
                     try await reauthenticateUser()
                 }
-
+                
                 let userToDelete = Auth.auth().currentUser ?? user
                 if let appleAuthorizationCode {
                     firebaseDeletionIDToken = try await userToDelete.getIDTokenResult(forcingRefresh: true).token
                     try await revokeAppleAuthorization(authorizationCode: appleAuthorizationCode)
                     print("Apple Sign in authorization revoked.")
                 }
-
+                
                 try await deleteUserDocuments()
                 shouldForceSignOut = true
                 try await deleteFirebaseAuthUser(userToDelete, fallbackIDToken: firebaseDeletionIDToken)
                 try? Auth.auth().signOut()
-
+                
                 await MainActor.run {
                     signedOut()
                 }
@@ -4285,7 +4327,7 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func revokeAppleAuthorization(authorizationCode: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             Auth.auth().revokeToken(withAuthorizationCode: authorizationCode) { error in
@@ -4297,7 +4339,7 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func deleteFirebaseAuthUser(_ userToDelete: User, fallbackIDToken: String?) async throws {
         do {
             try await userToDelete.delete()
@@ -4306,48 +4348,48 @@ private struct ProfileSettingsContent: View {
             guard let fallbackIDToken else {
                 throw error
             }
-
+            
             print("Firebase Auth SDK deletion failed, retrying with REST: \(error)")
             try await deleteFirebaseAuthUserWithREST(idToken: fallbackIDToken)
             print("Firebase Auth user deleted with REST fallback: \(userToDelete.uid)")
         }
     }
-
+    
     private func deleteFirebaseAuthUserWithREST(idToken: String) async throws {
         guard let apiKey = Bundle.main.object(forInfoDictionaryKey: "API_KEY") as? String,
               let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:delete?key=\(apiKey)") else {
             throw ProfileSettingsError.missingFirebaseAPIKey
         }
-
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["idToken": idToken])
-
+        
         let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             throw ProfileSettingsError.firebaseRESTDeletionFailed
         }
     }
-
+    
     private func selectPreviousAvatar() {
         selectedAvatarIndex = selectedAvatarIndex == 0 ? Self.avatarNames.count - 1 : selectedAvatarIndex - 1
     }
-
+    
     private func selectNextAvatar() {
         selectedAvatarIndex = (selectedAvatarIndex + 1) % Self.avatarNames.count
     }
-
+    
     private func reauthenticateUser() async throws {
         let credential = EmailAuthProvider.credential(withEmail: savedEmail, password: currentPassword)
         try await user.reauthenticate(with: credential)
     }
-
+    
     private func appleDeletionContext() async throws -> AppleDeletionContext {
         let nonce = randomNonceString()
         let appleIDCredential = try await requestAppleCredential(nonce: nonce)
-
+        
         guard let appleIDToken = appleIDCredential.identityToken,
               let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
             throw ProfileSettingsError.missingAppleIdentityToken
@@ -4356,26 +4398,26 @@ private struct ProfileSettingsContent: View {
               let authorizationCodeString = String(data: authorizationCode, encoding: .utf8) else {
             throw ProfileSettingsError.missingAppleAuthorizationCode
         }
-
+        
         let credential = OAuthProvider.appleCredential(
             withIDToken: idTokenString,
             rawNonce: nonce,
             fullName: appleIDCredential.fullName
         )
-
+        
         return AppleDeletionContext(
             credential: credential,
             authorizationCode: authorizationCodeString
         )
     }
-
+    
     private func requestAppleCredential(nonce: String) async throws -> ASAuthorizationAppleIDCredential {
         try await withCheckedThrowingContinuation { continuation in
             Task { @MainActor in
                 let request = ASAuthorizationAppleIDProvider().createRequest()
                 request.requestedScopes = [.fullName, .email]
                 request.nonce = sha256(nonce)
-
+                
                 let coordinator = ProfileAppleSignInCoordinator(
                     onSuccess: { credential in
                         appleSignInCoordinator = nil
@@ -4386,9 +4428,9 @@ private struct ProfileSettingsContent: View {
                         continuation.resume(throwing: error)
                     }
                 )
-
+                
                 appleSignInCoordinator = coordinator
-
+                
                 let authorizationController = ASAuthorizationController(authorizationRequests: [request])
                 authorizationController.delegate = coordinator
                 authorizationController.presentationContextProvider = coordinator
@@ -4396,10 +4438,10 @@ private struct ProfileSettingsContent: View {
             }
         }
     }
-
+    
     private func validateProfileAvailability() async throws {
         let database = Firestore.firestore()
-
+        
         if displayNameKey != savedDisplayNameKey {
             let profileKeySnapshot = try await database
                 .collection("users")
@@ -4411,15 +4453,15 @@ private struct ProfileSettingsContent: View {
                 .whereField("pseudo", isEqualTo: trimmedDisplayName)
                 .limit(to: 1)
                 .getDocuments()
-
+            
             if profileKeySnapshot.documents.contains(where: { $0.documentID != user.uid }) ||
                 profileSnapshot.documents.contains(where: { $0.documentID != user.uid }) {
                 throw ProfileSettingsError.displayNameAlreadyTaken
             }
         }
-
+        
     }
-
+    
     private func saveUserDocument(email: String, emailKey: String) async throws {
         let database = Firestore.firestore()
         let updates: [String: Any] = [
@@ -4431,39 +4473,39 @@ private struct ProfileSettingsContent: View {
             "avatarID": selectedAvatarID,
             "updatedAt": FieldValue.serverTimestamp()
         ]
-
+        
         try await database
             .collection("users")
             .document(user.uid)
             .setData(updates, merge: true)
     }
-
+    
     private func deleteUserDocuments() async throws {
         let database = Firestore.firestore()
         try await database.collection("users").document(user.uid).delete()
     }
-
+    
     private func firebaseMessage(for error: Error) -> String {
         if let profileError = error as? ProfileSettingsError {
             return profileError.message
         }
-
+        
         if let authorizationError = error as? ASAuthorizationError,
            authorizationError.code == .canceled {
             return "Confirmation Apple annulee."
         }
-
+        
         let nsError = error as NSError
         if nsError.domain == AuthErrorDomain,
            nsError.code == AuthErrorCode.operationNotAllowed.rawValue,
            nsError.localizedDescription.contains("Code flow is not enabled for Apple") {
             return "La revocation Apple n'est pas configuree dans Firebase."
         }
-
+        
         guard let code = AuthErrorCode(rawValue: nsError.code) else {
             return nsError.localizedDescription
         }
-
+        
         switch code {
         case .emailAlreadyInUse:
             return "Cet e-mail a deja un compte."
@@ -4483,41 +4525,41 @@ private struct ProfileSettingsContent: View {
             return nsError.localizedDescription
         }
     }
-
+    
     private func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
-
+        
         let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
         var result = ""
         var remainingLength = length
-
+        
         while remainingLength > 0 {
             var randomBytes = [UInt8](repeating: 0, count: 16)
             let status = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
-
+            
             if status != errSecSuccess {
                 fatalError("Impossible de generer le nonce Apple.")
             }
-
+            
             randomBytes.forEach { randomByte in
                 if remainingLength == 0 {
                     return
                 }
-
+                
                 if randomByte < charset.count {
                     result.append(charset[Int(randomByte)])
                     remainingLength -= 1
                 }
             }
         }
-
+        
         return result
     }
-
+    
     private func sha256(_ input: String) -> String {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
-
+        
         return hashedData.map {
             String(format: "%02x", $0)
         }.joined()
@@ -4530,7 +4572,7 @@ private enum ProfileSettingsError: Error {
     case missingAppleAuthorizationCode
     case missingFirebaseAPIKey
     case firebaseRESTDeletionFailed
-
+    
     var message: String {
         switch self {
         case .displayNameAlreadyTaken:
@@ -4555,7 +4597,7 @@ private struct AppleDeletionContext {
 private final class ProfileAppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     let onSuccess: (ASAuthorizationAppleIDCredential) -> Void
     let onFailure: (Error) -> Void
-
+    
     init(
         onSuccess: @escaping (ASAuthorizationAppleIDCredential) -> Void,
         onFailure: @escaping (Error) -> Void
@@ -4563,7 +4605,7 @@ private final class ProfileAppleSignInCoordinator: NSObject, ASAuthorizationCont
         self.onSuccess = onSuccess
         self.onFailure = onFailure
     }
-
+    
     func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
@@ -4572,14 +4614,14 @@ private final class ProfileAppleSignInCoordinator: NSObject, ASAuthorizationCont
             onFailure(ProfileSettingsError.missingAppleIdentityToken)
             return
         }
-
+        
         onSuccess(credential)
     }
-
+    
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
         onFailure(error)
     }
-
+    
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -4592,7 +4634,7 @@ private struct SettingsMenuButton: View {
     let title: String
     var isDestructive = false
     let action: () -> Void
-
+    
     var body: some View {
         Button(title, action: action)
             .buttonStyle(XPButtonStyle(foregroundColor: isDestructive ? .red : .black))
@@ -4606,7 +4648,7 @@ private struct XPToolbarIconButton: View {
     let accessibilityLabel: String
     var foregroundColor: Color = .black.opacity(0.78)
     let action: () -> Void
-
+    
     var body: some View {
         Button(action: action) {
             Group {
@@ -4641,13 +4683,13 @@ private struct SettingsDetailWindow<Content: View>: View {
     let title: String
     let closeAction: () -> Void
     let content: Content
-
+    
     init(title: String, closeAction: @escaping () -> Void, @ViewBuilder content: () -> Content) {
         self.title = title
         self.closeAction = closeAction
         self.content = content()
     }
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -4656,14 +4698,14 @@ private struct SettingsDetailWindow<Content: View>: View {
                     .foregroundStyle(.black)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
-
+                
                 Spacer(minLength: 0)
-
+                
                 Button("X", action: closeAction)
                     .buttonStyle(XPButtonStyle(foregroundColor: .red))
                     .frame(width: 42)
             }
-
+            
             content
         }
         .padding(14)
@@ -4678,24 +4720,24 @@ private struct SettingsDetailWindow<Content: View>: View {
 private struct DeleteAccountConfirmationWindow: View {
     let cancelAction: () -> Void
     let confirmAction: () -> Void
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Supprimer définitivement ce compte ?")
                 .font(.xpTahoma(size: 18, weight: .bold))
                 .foregroundStyle(.black)
                 .fixedSize(horizontal: false, vertical: true)
-
+            
             Text("Le compte sera supprimé définitivement.")
                 .font(.xpTahoma(size: 13))
                 .foregroundStyle(.black.opacity(0.78))
                 .fixedSize(horizontal: false, vertical: true)
-
+            
             HStack(spacing: 10) {
                 Button("Annuler", action: cancelAction)
                     .buttonStyle(XPButtonStyle())
                     .frame(maxWidth: .infinity)
-
+                
                 Button("Supprimer", action: confirmAction)
                     .buttonStyle(XPButtonStyle(foregroundColor: .red))
                     .frame(maxWidth: .infinity)
@@ -4712,7 +4754,7 @@ private struct DeleteAccountConfirmationWindow: View {
 
 private struct SettingsTextPanel: View {
     let lines: [String]
-
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(lines, id: \.self) { line in
@@ -4727,11 +4769,11 @@ private struct SettingsTextPanel: View {
 
 private struct SettingsSectionTitle: View {
     let title: String
-
+    
     init(_ title: String) {
         self.title = title
     }
-
+    
     var body: some View {
         Text(title)
             .font(.xpTahoma(size: 14, weight: .bold))
@@ -4743,15 +4785,15 @@ private struct ProfileAvatarPickerRow: View {
     let avatarName: String
     let previousAction: () -> Void
     let nextAction: () -> Void
-
+    
     var body: some View {
         HStack(spacing: 12) {
             Button("<", action: previousAction)
                 .buttonStyle(XPButtonStyle())
                 .frame(width: 44)
-
+            
             AvatarBadge(name: avatarName)
-
+            
             Button(">", action: nextAction)
                 .buttonStyle(XPButtonStyle())
                 .frame(width: 44)
@@ -4765,7 +4807,7 @@ private struct ProfileTextField: View {
     var prompt: String
     var keyboard: UIKeyboardType = .default
     var textContentType: UITextContentType?
-
+    
     var body: some View {
         TextField(text: $text) {
             Text(prompt)
@@ -4782,7 +4824,7 @@ private struct ProfileTextField: View {
 private struct ProfileReadOnlyField: View {
     let text: String
     let prompt: String
-
+    
     var body: some View {
         Text(text.isEmpty ? prompt : text)
             .font(.custom("Tahoma", size: 16))
@@ -4799,7 +4841,7 @@ private struct ProfileSecureField: View {
     @Binding var text: String
     var prompt: String
     var textContentType: UITextContentType? = .password
-
+    
     var body: some View {
         SecurePasswordTextField(
             text: $text,
@@ -4813,13 +4855,13 @@ private struct ProfileSecureField: View {
 private struct SettingsLegalFooter: View {
     private let legalNoticeURL = URL(string: "https://flechemoica.fr/mentions-legales.html")
     private let privacyURL = URL(string: "https://flechemoica.fr/privacy.html")
-
+    
     @State private var presentedPage: SettingsLegalPage?
-
+    
     var body: some View {
         VStack(spacing: 4) {
             Text("© 2026 Flèche-moi ça")
-
+            
             HStack(spacing: 14) {
                 if let legalNoticeURL {
                     Button {
@@ -4830,7 +4872,7 @@ private struct SettingsLegalFooter: View {
                     }
                     .buttonStyle(.plain)
                 }
-
+                
                 if let privacyURL {
                     Button {
                         presentedPage = SettingsLegalPage(title: "Confidentialité", url: privacyURL)
@@ -4867,9 +4909,9 @@ private struct SettingsLegalPage: Identifiable {
 
 private struct SettingsInternalWebSheet: View {
     @Environment(\.dismiss) private var dismiss
-
+    
     let page: SettingsLegalPage
-
+    
     var body: some View {
         NavigationView {
             SettingsWebView(url: page.url)
@@ -4888,14 +4930,14 @@ private struct SettingsInternalWebSheet: View {
 
 private struct SettingsWebView: UIViewRepresentable {
     let url: URL
-
+    
     func makeUIView(context: Context) -> WKWebView {
         let webView = WKWebView(frame: .zero)
         webView.load(URLRequest(url: url))
-
+        
         return webView
     }
-
+    
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 }
 
@@ -4914,11 +4956,11 @@ private struct EditorBadge: View {
 private struct AvatarBadge: View {
     let name: String
     var size: CGFloat = 78
-
+    
     var body: some View {
         ZStack {
             Color.white
-
+            
             if let image = UIImage(named: name) {
                 Image(uiImage: image)
                     .resizable()
@@ -4934,13 +4976,19 @@ private struct AvatarBadge: View {
         .overlay(Rectangle().stroke(Color.black.opacity(0.55), lineWidth: 1))
     }
 }
-
+    
 private extension View {
     func xpPanelCard(padding: CGFloat = 14) -> some View {
         self
             .padding(padding)
             .background(Color.xpPanel)
-            .overlay(Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2))
+            .overlay(
+                Rectangle()
+                    .stroke(
+                        Color(red: 0.5, green: 0.62, blue: 0.73),
+                        lineWidth: 2
+                    )
+            )
     }
 
     func settingsPanel() -> some View {
@@ -4957,6 +5005,12 @@ private extension View {
             .padding(.horizontal, 9)
             .frame(height: 42)
             .background(Color.white)
-            .overlay(Rectangle().stroke(Color(red: 0.44, green: 0.55, blue: 0.66), lineWidth: 2))
+            .overlay(
+                Rectangle()
+                    .stroke(
+                        Color(red: 0.44, green: 0.55, blue: 0.66),
+                        lineWidth: 2
+                    )
+            )
     }
 }
