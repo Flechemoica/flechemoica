@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Contactez l’équipe de Flèche-moi ça pour toute question, demande d’assistance ou remarque.">
+  <title>Contact — Flèche-moi ça</title>
+
+  <style>
+    :root {
+      --violet: #7c5ce0;
+      --violet-dark: #4f35a8;
+      --window-grey: #c0c0c0;
+      --window-light: #ffffff;
+      --window-dark: #808080;
+      --window-black: #000000;
+      --title-blue: #000080;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      background: var(--violet);
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #000;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 24%),
+        radial-gradient(circle at 80% 75%, rgba(0, 0, 0, 0.08), transparent 28%),
+        var(--violet);
+      font-family: "Chicago", "MS Sans Serif", Geneva, Arial, sans-serif;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .window {
+      width: min(760px, 100%);
+      background: var(--window-grey);
+      border-top: 3px solid var(--window-light);
+      border-left: 3px solid var(--window-light);
+      border-right: 3px solid var(--window-black);
+      border-bottom: 3px solid var(--window-black);
+      box-shadow: 12px 12px 0 rgba(0, 0, 0, 0.24);
+    }
+
+    .title-bar {
+      min-height: 38px;
+      margin: 3px;
+      padding: 5px 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #fff;
+      background: linear-gradient(90deg, var(--title-blue), #1084d0);
+      font-weight: 700;
+    }
+
+    .title-bar__icon {
+      width: 23px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      color: #000;
+      background: #fff;
+      border-top: 2px solid #fff;
+      border-left: 2px solid #fff;
+      border-right: 2px solid #000;
+      border-bottom: 2px solid #000;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .title-bar__text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 4px;
+    }
+
+    .window-control {
+      width: 26px;
+      height: 24px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      color: #000;
+      background: var(--window-grey);
+      border-top: 2px solid #fff;
+      border-left: 2px solid #fff;
+      border-right: 2px solid #000;
+      border-bottom: 2px solid #000;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .menu-bar {
+      margin: 0 3px;
+      padding: 7px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      border-bottom: 1px solid var(--window-dark);
+    }
+
+    .menu-bar a {
+      color: #000;
+      text-decoration: none;
+    }
+
+    .menu-bar a:hover,
+    .menu-bar a:focus-visible {
+      text-decoration: underline;
+    }
+
+    .content {
+      padding: 26px;
+    }
+
+    .intro {
+      margin-bottom: 22px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.55rem, 5vw, 2.35rem);
+      font-style: italic;
+      text-transform: uppercase;
+    }
+
+    .intro p {
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .panel {
+      padding: 18px;
+      background: #e8e8e8;
+      border-top: 2px solid var(--window-dark);
+      border-left: 2px solid var(--window-dark);
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      padding: 10px 11px;
+      color: #000;
+      background: #fff;
+      border-top: 2px solid #000;
+      border-left: 2px solid #000;
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      border-radius: 0;
+      outline: none;
+    }
+
+    .field textarea {
+      min-height: 170px;
+      resize: vertical;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      box-shadow: 0 0 0 2px var(--violet-dark);
+    }
+
+    .help-text {
+      margin: -8px 0 16px;
+      color: #333;
+      font-size: 0.88rem;
+      line-height: 1.4;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .button {
+      min-width: 150px;
+      padding: 10px 18px;
+      color: #000;
+      background: var(--window-grey);
+      border-top: 3px solid #fff;
+      border-left: 3px solid #fff;
+      border-right: 3px solid #000;
+      border-bottom: 3px solid #000;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .button:active {
+      padding: 12px 16px 8px 20px;
+      border-top-color: #000;
+      border-left-color: #000;
+      border-right-color: #fff;
+      border-bottom-color: #fff;
+    }
+
+    .direct-mail {
+      color: #000;
+    }
+
+    .status-bar {
+      margin: 3px;
+      padding: 7px 9px;
+      border-top: 2px solid var(--window-dark);
+      border-left: 2px solid var(--window-dark);
+      border-right: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      font-size: 0.82rem;
+    }
+
+    .honeypot {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 560px) {
+      body {
+        padding: 12px;
+        align-items: flex-start;
+      }
+
+      .content {
+        padding: 18px 14px;
+      }
+
+      .panel {
+        padding: 14px;
+      }
+
+      .menu-bar {
+        gap: 12px;
+      }
+
+      .actions {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="window" aria-labelledby="page-title">
+    <header class="title-bar">
+      <span class="title-bar__icon" aria-hidden="true">✉</span>
+      <span class="title-bar__text">Flèche-moi ça.exe — Contact</span>
+
+      <span class="window-controls" aria-hidden="true">
+        <span class="window-control">_</span>
+        <span class="window-control">□</span>
+        <a class="window-control" href="/" tabindex="-1">×</a>
+      </span>
+    </header>
+
+    <nav class="menu-bar" aria-label="Navigation principale">
+      <a href="/">Accueil</a>
+      <a href="/contact.html" aria-current="page"><strong>Contact</strong></a>
+      <a href="mailto:contact@flechemoica.fr">E-mail</a>
+    </nav>
+
+    <section class="content">
+      <div class="intro">
+        <h1 id="page-title">Nous contacter</h1>
+
+        <p>
+          Une question, un problème avec l’application ou une suggestion pour une future grille ?
+          Envoie-nous un message avec ce formulaire.
+        </p>
+      </div>
+
+      <form
+        class="panel"
+        action="https://formsubmit.co/contact@flechemoica.fr"
+        method="POST"
+      >
+        <input
+          type="hidden"
+          name="_subject"
+          value="Nouveau message depuis flechemoica.fr"
+        >
+
+        <input
+          type="hidden"
+          name="_template"
+          value="table"
+        >
+
+        <input
+          type="hidden"
+          name="_captcha"
+          value="true"
+        >
+
+        <input
+          type="hidden"
+          name="_next"
+          value="https://flechemoica.fr/contact.html?message=envoye"
+        >
+
+        <div class="honeypot" aria-hidden="true">
+          <label for="company">Ne pas remplir ce champ</label>
+
+          <input
+            id="company"
+            type="text"
+            name="_honey"
+            tabindex="-1"
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="field">
+          <label for="name">Nom ou pseudo</label>
+
+          <input
+            id="name"
+            name="Nom"
+            type="text"
+            autocomplete="name"
+            maxlength="100"
+            required
+          >
+        </div>
+
+        <div class="field">
+          <label for="email">Adresse e-mail</label>
+
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            maxlength="254"
+            required
+          >
+        </div>
+
+        <div class="field">
+          <label for="subject">Objet</label>
+
+          <select id="subject" name="Objet" required>
+            <option value="" selected disabled>Choisir un objet</option>
+            <option value="Assistance application">Assistance concernant l’application</option>
+            <option value="Problème de compte">Problème de compte</option>
+            <option value="Erreur dans une grille">Erreur dans une grille</option>
+            <option value="Suggestion">Suggestion</option>
+            <option value="Partenariat">Partenariat</option>
+            <option value="Autre demande">Autre demande</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="message">Message</label>
+
+          <textarea
+            id="message"
+            name="Message"
+            maxlength="5000"
+            required
+          ></textarea>
+        </div>
+
+        <p class="help-text">
+          Les informations saisies sont uniquement utilisées pour répondre à ta demande.
+          Elles sont transmises à FormSubmit afin de nous envoyer le message par e-mail.
+        </p>
+
+        <div class="actions">
+          <button class="button" type="submit">
+            Envoyer le message
+          </button>
+
+          <a
+            class="direct-mail"
+            href="mailto:contact@flechemoica.fr"
+          >
+            Ou écrire directement par e-mail
+          </a>
+        </div>
+      </form>
+    </section>
+
+    <footer class="status-bar" id="status-message">
+      Prêt.
+    </footer>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const statusMessage = document.getElementById("status-message");
+
+    if (params.get("message") === "envoye") {
+      statusMessage.textContent = "Message envoyé. Merci !";
+      history.replaceState({}, "", window.location.pathname);
+    }
+  </script>
+</body>
+</html>
