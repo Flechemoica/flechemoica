@@ -392,7 +392,13 @@ body {
 .card label {
     font-weight: bold;
 }
+.legal-card {
+    text-align: left;
+}
 
+.legal-card h2 {
+    text-align: center;
+}
 .separator-right::after {
   content: "";
   position: absolute;
