@@ -33,10 +33,16 @@ struct HomeNativeAdCard: View {
     let userID: String
     var mediaAspectRatio: CGFloat = 16 / 9
     var fillsAvailableSpace = false
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
 
     var body: some View {
         #if canImport(GoogleMobileAds)
-        if Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") != nil {
+        if !advertisingConsent.canRequestAds {
+            NativeAdPlaceholder(
+                message: "Préparation des préférences publicitaires...",
+                fillsAvailableSpace: fillsAvailableSpace
+            )
+        } else if Bundle.main.object(forInfoDictionaryKey: "GADApplicationIdentifier") != nil {
             NativeAdContainer(
                 adUnitID: adUnitID,
                 userID: userID,

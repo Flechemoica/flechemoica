@@ -9,6 +9,7 @@ struct HomeBannerAdCard: View {
     let adUnitID: String
     let maximumAdHeight: CGFloat
     @State private var didFailToLoad = false
+    @ObservedObject private var advertisingConsent = AdvertisingConsentManager.shared
 
     private var effectiveAdUnitID: String {
         return adUnitID
@@ -16,7 +17,7 @@ struct HomeBannerAdCard: View {
 
     var body: some View {
         Group {
-            if !didFailToLoad {
+            if advertisingConsent.canRequestAds, !didFailToLoad {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Annonce")
                         .font(.system(size: 9, weight: .bold))

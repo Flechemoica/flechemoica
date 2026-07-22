@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleGetInfoString</key>
-	<string></string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -17,6 +17,8 @@
 	</array>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-1003964550278910~7250171720</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Votre autorisation permet à Flèche-moi ça de vous proposer des publicités plus pertinentes et de mesurer leur efficacité.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

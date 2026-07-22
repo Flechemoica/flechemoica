@@ -5,7 +5,6 @@ struct ContentView: View {
     @State private var isLaunchComplete = false
     @State private var currentUser: User?
     @State private var authStateHandle: AuthStateDidChangeListenerHandle?
-    @State private var hasRequestedTrackingPermission = false
 
     var body: some View {
         ZStack {
@@ -20,8 +19,8 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.35), value: isLaunchComplete)
         .animation(.easeInOut(duration: 0.25), value: currentUser?.uid)
-        .task(id: trackingPermissionRequestID) {
-            requestTrackingPermissionIfAuthenticated()
+        .task(id: advertisingConsentRequestID) {
+            prepareAdvertisingIfAuthenticated()
         }
         .onAppear {
             startAuthStateListener()
@@ -52,7 +51,7 @@ struct ContentView: View {
         }
     }
 
-    private var trackingPermissionRequestID: String {
+    private var advertisingConsentRequestID: String {
         "\(isLaunchComplete)-\(currentUser?.uid ?? "anonymous")"
     }
 
@@ -85,13 +84,12 @@ struct ContentView: View {
         self.authStateHandle = nil
     }
 
-    private func requestTrackingPermissionIfAuthenticated() {
-        guard isLaunchComplete, currentUser != nil, !hasRequestedTrackingPermission else {
+    private func prepareAdvertisingIfAuthenticated() {
+        guard isLaunchComplete, currentUser != nil else {
             return
         }
 
-        hasRequestedTrackingPermission = true
-        TrackingPermissionRequester.requestAfterAuthenticationIfPossible()
+        AdvertisingConsentManager.shared.prepareAfterAuthentication()
     }
 
     private func configurePushNotifications(for user: User) {

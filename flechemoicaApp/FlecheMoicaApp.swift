@@ -41,15 +41,6 @@ struct FlecheMoicaApp: App {
         FirebaseConfiguration.shared.setLoggerLevel(.min)
         FirebaseApp.configure()
 
-        #if canImport(GoogleMobileAds)
-        #if DEBUG
-        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = [
-            "2e253a88deb5639735e1a447219311b4"
-        ]
-        #endif
-        MobileAds.shared.start()
-        #endif
-
         Task {
             do {
                 try await UNUserNotificationCenter.current().setBadgeCount(0)
