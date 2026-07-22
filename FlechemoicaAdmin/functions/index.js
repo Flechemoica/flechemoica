@@ -478,7 +478,7 @@ exports.cancelAdminNotification = onCall({ region: "europe-west1" }, async (requ
 exports.publishScheduledGrids = onSchedule(
   {
     region: "europe-west1",
-    schedule: "* * * * *",
+    schedule: "0 17 * * *",
     timeZone: "Europe/Paris",
   },
   async () => {
