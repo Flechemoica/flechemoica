@@ -3119,10 +3119,15 @@ private struct CrosswordCell: View {
             return Color(red: 1.0, green: 0.55, blue: 0.52)
         }
         
-        // Le segment de définition sélectionné est coloré dans
-        // DefinitionCellSegment. Le fond reste violet pour que l'autre
-        // moitié d'une double définition ne change pas de couleur.
+        // Une définition simple sélectionnée colore directement toute
+        // la case en jaune. Pour une double définition, le fond reste
+        // violet et seul le segment choisi est coloré plus bas.
         if isDefinition {
+            if definitionWords.count == 1,
+               definitionWords.first?.id == selectedWordID {
+                return yellow
+            }
+
             return Color(
                 red: 193 / 255,
                 green: 174 / 255,
