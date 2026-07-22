@@ -52,6 +52,12 @@ deploy_firebase_admin() {
         --only "hosting:$HOSTING_TARGET" \
         --non-interactive
 
+    log "Deploiement des fonctions locales"
+    run "${FIREBASE_CMD[@]}" deploy \
+        --project "$PROJECT_ID" \
+        --only "functions:adminUserAction,functions:adminUsersMeta,functions:sendAdminNotification,functions:cancelAdminNotification,functions:deleteAdminNotification,functions:publishScheduledGrids,functions:notifyWeeklyGridPublished" \
+        --non-interactive
+
     log "Deploiement Firebase admin termine avec succes"
 }
 

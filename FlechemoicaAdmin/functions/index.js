@@ -12,7 +12,6 @@ const EDITOR_STATUS = "editor";
 const APP_NOTIFICATION_TITLE = "Flèche-moi ça";
 const WEEKLY_GRIDS_TOPIC = "weekly_grids";
 const ALL_USERS_TOPIC = "all_users";
-const MULTICAST_BATCH_SIZE = 500;
 const GRIDS_COLLECTION = "grids";
 const WEEKLY_GRID_TYPE = "WeeklyGrid";
 const NOTIFICATION_LOGS_COLLECTION = "notificationLogs";
@@ -81,31 +80,6 @@ function buildApnsConfig(options = {}) {
   }
 
   return apns;
-}
-
-function chunkArray(items, size) {
-  const chunks = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
-}
-
-async function getRegisteredFCMTokens() {
-  const snapshot = await getFirestore().collection("users").get();
-  const tokens = new Set();
-
-  snapshot.docs.forEach((doc) => {
-    const fcmTokens = doc.get("fcmTokens");
-    if (!Array.isArray(fcmTokens)) return;
-
-    fcmTokens.forEach((token) => {
-      const normalized = String(token || "").trim();
-      if (normalized) tokens.add(normalized);
-    });
-  });
-
-  return [...tokens];
 }
 
 async function assertEditor(uid) {
@@ -180,33 +154,19 @@ async function sendTopicNotification({ title, body, topic, data = {}, options = 
 }
 
 async function sendAllUsersNotification({ title, body, data = {}, options = {} }) {
-  const tokens = await getRegisteredFCMTokens();
-  if (!tokens.length) {
-    throw new Error("Aucun token FCM enregistré.");
-  }
+  const messageID = await sendTopicNotification({
+    title,
+    body,
+    topic: ALL_USERS_TOPIC,
+    data,
+    options,
+  });
 
-  const batches = chunkArray(tokens, MULTICAST_BATCH_SIZE);
-  const results = await Promise.all(
-    batches.map((batch) => getMessaging().sendEachForMulticast({
-      tokens: batch,
-      notification: { title, body },
-      data,
-      apns: buildApnsConfig(options),
-    }))
-  );
-
-  return results.reduce(
-    (summary, result) => ({
-      tokenCount: summary.tokenCount,
-      successCount: summary.successCount + result.successCount,
-      failureCount: summary.failureCount + result.failureCount,
-    }),
-    {
-      tokenCount: tokens.length,
-      successCount: 0,
-      failureCount: 0,
-    }
-  );
+  return {
+    target: "topic",
+    topic: ALL_USERS_TOPIC,
+    messageID,
+  };
 }
 
 async function sendScheduledAdminNotifications() {
@@ -275,6 +235,7 @@ async function publishDueGrids(collectionName) {
     batch.update(doc.ref, {
       status: "published",
       publishedAt: FieldValue.serverTimestamp(),
+      publishedByScheduleAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
   });
@@ -475,6 +436,25 @@ exports.cancelAdminNotification = onCall({ region: "europe-west1" }, async (requ
   return { ok: true, notificationID, status: "cancelled" };
 });
 
+exports.deleteAdminNotification = onCall({ region: "europe-west1" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Connexion requise.");
+  }
+
+  await assertEditor(request.auth.uid);
+
+  const notificationID = requireString(request.data?.notificationID, "Notification");
+  const ref = getFirestore().collection(NOTIFICATION_LOGS_COLLECTION).doc(notificationID);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    throw new HttpsError("not-found", "Notification introuvable.");
+  }
+
+  await ref.delete();
+  return { ok: true, notificationID };
+});
+
 exports.publishScheduledGrids = onSchedule(
   {
     region: "europe-west1",
@@ -502,6 +482,18 @@ exports.notifyWeeklyGridPublished = onDocumentUpdated(
     if (normalizeStatus(before.status) === "published") return;
     if (normalizeStatus(after.status) !== "published") return;
     if (after.type !== WEEKLY_GRID_TYPE) return;
+
+    const beforeScheduledPublication = before.publishedByScheduleAt;
+    const afterScheduledPublication = after.publishedByScheduleAt;
+    const beforeScheduledPublicationMillis = typeof beforeScheduledPublication?.toMillis === "function"
+      ? beforeScheduledPublication.toMillis()
+      : null;
+    const afterScheduledPublicationMillis = typeof afterScheduledPublication?.toMillis === "function"
+      ? afterScheduledPublication.toMillis()
+      : null;
+    const wasPublishedBySchedule = afterScheduledPublicationMillis !== null
+      && afterScheduledPublicationMillis !== beforeScheduledPublicationMillis;
+    if (!wasPublishedBySchedule) return;
 
     await sendWeeklyGridNotification(event.params.gridID, after);
     await event.data.after.ref.set({

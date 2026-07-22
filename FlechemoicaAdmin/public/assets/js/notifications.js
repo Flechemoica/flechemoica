@@ -326,6 +326,10 @@ const NotificationsView = (() => {
   function formatDelivery(delivery) {
     if (!delivery) return "-";
 
+    if (delivery.target === "topic") {
+      return delivery.topic === "all_users" ? "Tous les utilisateurs" : `Topic ${delivery.topic || "-"}`;
+    }
+
     const successCount = Number(delivery.successCount || 0);
     const tokenCount = Number(delivery.tokenCount || 0);
     const failureCount = Number(delivery.failureCount || 0);
