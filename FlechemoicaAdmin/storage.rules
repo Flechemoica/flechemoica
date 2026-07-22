@@ -7,7 +7,7 @@ service firebase.storage {
     }
 
     function editorStatuses() {
-      return ["admin", "Admin", "ADMIN", "editor", "Editor", "EDITOR", "editors", "Editors", "EDITORS"];
+      return ["editor", "Editor", "EDITOR"];
     }
 
     function isEditor() {

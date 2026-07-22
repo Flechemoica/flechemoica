@@ -203,7 +203,7 @@ const UsersView = (() => {
       makeIdentityCell(id, data),
       makeEmailCell(data),
       makeProviderCell(id, data),
-      makeStatusCell(data.status || data.role || "Utilisateur"),
+      makeStatusCell(data.status || "Utilisateur"),
       makeTextCell(formatValue(data.lastAppLaunchAt)),
       makeTextCell(formatValue(data.createdAt)),
       makeActionsCell(id, data)
@@ -303,7 +303,7 @@ const UsersView = (() => {
       ["Nom d'utilisateur", data.pseudo || data.displayName || "-"],
       ["E-mail", data.email || data.emailKey || "-"],
       ["Connexion", formatProviders(metadata?.providers || getFallbackProviders(data))],
-      ["Rôle", data.status || data.role || "Utilisateur"],
+      ["Statut", data.status || "Utilisateur"],
       ["Dernier lancement", formatValue(data.lastAppLaunchAt)],
       ["Création", formatValue(data.createdAt)],
       ["Mise à jour", formatValue(data.updatedAt)],
@@ -335,7 +335,6 @@ const UsersView = (() => {
   function renderDetailActions(id, data) {
     if (!detailActions) return;
 
-    const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
     const isDisabled = data.accountStatus === "disabled";
     const currentUser = firebase.auth().currentUser;
     const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
@@ -354,17 +353,6 @@ const UsersView = (() => {
       );
     }
 
-    if (!(isCurrentUser && isEditor)) {
-      detailActions.append(
-        makeDetailActionButton(isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur", () => {
-          if (isEditor) {
-            removeEditorStatus(id, data);
-          } else {
-            promoteToEditor(id, data);
-          }
-        })
-      );
-    }
   }
 
   function makeDetailActionButton(label, action, tone = "") {
@@ -510,7 +498,7 @@ const UsersView = (() => {
     const cell = document.createElement("td");
     const badge = document.createElement("span");
     const normalized = String(value || "").toLowerCase();
-    cell.className = "role-cell";
+    cell.className = "status-cell";
     badge.className = "status-badge";
     if (normalized === "editor") {
       badge.classList.add("status-badge-editor");
@@ -537,7 +525,6 @@ const UsersView = (() => {
     const wrapper = document.createElement("div");
     const button = document.createElement("button");
     const menu = document.createElement("div");
-    const isEditor = String(data.status || data.role || "").toLowerCase() === "editor";
     const isDisabled = data.accountStatus === "disabled";
     const currentUser = firebase.auth().currentUser;
     const isCurrentUser = currentUser && (id === currentUser.uid || data.uid === currentUser.uid);
@@ -569,18 +556,6 @@ const UsersView = (() => {
           () => setAccountDisabled(id, data, !isDisabled)
         ),
         createMenuButton("Supprimer le compte", () => deleteAccount(id, data), "danger")
-      );
-    }
-
-    if (!(isCurrentUser && isEditor)) {
-      menu.append(
-        createMenuButton(isEditor ? "Retirer statut Éditeur" : "Déclarer statut Éditeur", () => {
-        if (isEditor) {
-          removeEditorStatus(id, data);
-        } else {
-          promoteToEditor(id, data);
-        }
-        })
       );
     }
 
@@ -621,27 +596,6 @@ const UsersView = (() => {
     document.querySelectorAll(".options-button[aria-expanded='true']").forEach((button) => {
       button.setAttribute("aria-expanded", "false");
     });
-  }
-
-  async function promoteToEditor(id, data) {
-    const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldPromote = await confirmSensitiveAction(
-      `Déclarer ${label} comme Éditeur et marquer son e-mail à confirmer ?`
-    );
-    if (!shouldPromote) return;
-
-    try {
-      setStatus("Mise à jour...");
-      await firestore.collection("users").doc(id).update({
-        status: "Editor",
-        emailVerificationStatus: "pending",
-        emailVerificationRequestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      setStatus("Utilisateur passé en Editor. E-mail à confirmer.");
-    } catch (error) {
-      setStatus(error.message || "Impossible de mettre à jour l'utilisateur.", "error");
-    }
   }
 
   async function loadAuthMetadata(docs) {
@@ -770,25 +724,6 @@ const UsersView = (() => {
       setStatus("Compte supprimé.");
     } catch (error) {
       setStatus(error.message || "Impossible de supprimer le compte.", "error");
-    }
-  }
-
-  async function removeEditorStatus(id, data) {
-    const label = data.pseudo || data.email || "cet utilisateur";
-    const shouldRemove = await confirmSensitiveAction(`Retirer le statut Éditeur de ${label} ?`);
-    if (!shouldRemove) return;
-
-    try {
-      setStatus("Mise à jour...");
-      await firestore.collection("users").doc(id).update({
-        status: "Utilisateur",
-        emailVerificationStatus: firebase.firestore.FieldValue.delete(),
-        emailVerificationRequestedAt: firebase.firestore.FieldValue.delete(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      });
-      setStatus("Statut Éditeur retiré.");
-    } catch (error) {
-      setStatus(error.message || "Impossible de retirer le statut Éditeur.", "error");
     }
   }
 

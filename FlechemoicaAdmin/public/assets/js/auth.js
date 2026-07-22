@@ -1,8 +1,7 @@
-const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
+const EDITOR_STATUS = "editor";
 const AuthGate = (() => {
   let auth;
   let firestore;
-  let database;
 
     function ensureFirebase() {
       if (!window.firebase || !firebase.apps.length) {
@@ -15,22 +14,16 @@ const AuthGate = (() => {
         firestore = firebase.firestore();
       }
 
-      database = database || (firebase.database ? firebase.database() : null);
-
-      return { auth, firestore, database };
+      return { auth, firestore };
     }
-
-  function normalizeEmail(email) {
-    return String(email || "").trim().toLowerCase();
-  }
 
   function normalizeAccessValue(value) {
     return String(value || "").trim().toLowerCase();
   }
 
   function isEditorProfile(profile) {
-    const status = normalizeAccessValue(profile?.status || profile?.role);
-    return Boolean(profile && EDITOR_STATUSES.has(status));
+    const status = normalizeAccessValue(profile?.status);
+    return Boolean(profile && status === EDITOR_STATUS);
   }
 
   function hasAccountingAccess(profile) {
@@ -39,67 +32,20 @@ const AuthGate = (() => {
     return profile.accountingAccess === true;
   }
 
-  async function getFirestoreUser(uid, email) {
+  async function getFirestoreUser(uid) {
     if (!firestore) return null;
 
     const byUid = await firestore.collection("users").doc(uid).get();
     if (byUid.exists) {
       return { id: byUid.id, source: "firestore", ...byUid.data() };
     }
-
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return null;
-
-    const byEmail = await firestore
-      .collection("users")
-      .where("email", "==", normalizedEmail)
-      .limit(1)
-      .get();
-
-    if (!byEmail.empty) {
-      const doc = byEmail.docs[0];
-      return { id: doc.id, source: "firestore", ...doc.data() };
-    }
-
     return null;
-  }
-
-  async function getRealtimeUser(uid, email) {
-    if (!database) return null;
-
-    const byUid = await database.ref(`users/${uid}`).get();
-    if (byUid.exists()) {
-      return { id: uid, source: "database", ...byUid.val() };
-    }
-
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return null;
-
-    const byEmail = await database
-      .ref("users")
-      .orderByChild("email")
-      .equalTo(normalizedEmail)
-      .limitToFirst(1)
-      .get();
-
-    if (!byEmail.exists()) return null;
-
-    let foundUser = null;
-    byEmail.forEach((child) => {
-      foundUser = { id: child.key, source: "database", ...child.val() };
-      return true;
-    });
-
-    return foundUser;
   }
 
   async function getEditorProfile(user) {
     ensureFirebase();
 
-    const firestoreUser = await getFirestoreUser(user.uid, user.email);
-    if (firestoreUser) return firestoreUser;
-
-    return getRealtimeUser(user.uid, user.email);
+    return getFirestoreUser(user.uid);
   }
 
   async function requireEditor(user) {
@@ -108,18 +54,6 @@ const AuthGate = (() => {
     if (!isEditorProfile(profile)) {
       await auth.signOut();
       throw new Error("Accès non autorisé.");
-    }
-
-    if (profile.source === "firestore" && profile.id !== user.uid) {
-      const editorValue = normalizeAccessValue(profile.status || profile.role);
-      await firestore.collection("users").doc(user.uid).set({
-        uid: user.uid,
-        email: normalizeEmail(user.email),
-        status: editorValue,
-        role: editorValue,
-        migratedEditorSource: profile.id,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      }, { merge: true });
     }
 
     if (profile.emailVerificationStatus === "pending" && !user.emailVerified) {

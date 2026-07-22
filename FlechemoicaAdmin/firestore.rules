@@ -11,7 +11,7 @@ service cloud.firestore {
     }
 
     function editorStatuses() {
-      return ["admin", "Admin", "ADMIN", "editor", "Editor", "EDITOR", "editors", "Editors", "EDITORS"];
+      return ["editor", "Editor", "EDITOR"];
     }
 
     function hasEditorStatus(profile) {
@@ -35,10 +35,13 @@ service cloud.firestore {
         || request.resource.data.uid == userId;
     }
 
-    function doesNotGrantEditorAccess() {
+    function doesNotCreateProtectedAccessFields() {
       return !("status" in request.resource.data)
-        || !(request.resource.data.status is string)
-        || !(request.resource.data.status in editorStatuses());
+        && !("role" in request.resource.data);
+    }
+
+    function doesNotChangeProtectedAccessFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(["status", "role"]);
     }
 
     match /users/{userId} {
@@ -48,14 +51,14 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.auth.uid == userId
         && requestedUserIdMatches(userId)
-        && doesNotGrantEditorAccess();
+        && doesNotCreateProtectedAccessFields();
 
-      allow update: if isEditor()
+      allow update: if (isEditor() && doesNotChangeProtectedAccessFields())
         || (
           request.auth != null
           && request.auth.uid == userId
           && requestedUserIdMatches(userId)
-          && doesNotGrantEditorAccess()
+          && doesNotChangeProtectedAccessFields()
         );
 
       allow delete: if (request.auth != null && request.auth.uid == userId) || isEditor();

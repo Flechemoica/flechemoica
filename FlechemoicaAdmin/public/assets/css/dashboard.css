@@ -1984,8 +1984,8 @@
   white-space: nowrap;
 }
 
-.users-table .role-column,
-.users-table .role-cell {
+.users-table .status-column,
+.users-table .status-cell {
   text-align: center;
 }
 
@@ -2075,7 +2075,7 @@
   color: var(--danger);
 }
 
-.role-cell .status-badge {
+.status-cell .status-badge {
   margin: 0 auto;
 }
 

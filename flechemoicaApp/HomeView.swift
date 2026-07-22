@@ -147,9 +147,8 @@ struct HomeView: View {
     }
 
     private static func isEditorProfile(_ data: [String: Any]?) -> Bool {
-        let role = (data?["role"] as? String)?.lowercased()
         let status = (data?["status"] as? String)?.lowercased()
-        return role == "editor" || status == "editor"
+        return status == "editor"
     }
 
     fileprivate static func completedGridTitles(from data: [String: Any]?) -> [String] {
@@ -1051,7 +1050,6 @@ private struct PublicProfile: Identifiable {
         let pseudo = data["pseudo"] as? String
         let uid = (data["uid"] as? String) ?? document.documentID
         let avatarID = (data["avatarID"] as? String) ?? "08.png"
-        let role = (data["role"] as? String)?.lowercased()
         let status = (data["status"] as? String)?.lowercased()
 
         guard let pseudo, !pseudo.isEmpty else {
@@ -1062,7 +1060,7 @@ private struct PublicProfile: Identifiable {
         self.uid = uid
         self.displayName = pseudo
         self.avatarName = avatarID.replacingOccurrences(of: ".png", with: "")
-        self.isEditor = role == "editor" || status == "editor"
+        self.isEditor = status == "editor"
         self.completedGridTitles = HomeView.completedGridTitles(from: data)
     }
 }

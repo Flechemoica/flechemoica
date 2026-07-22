@@ -8,7 +8,7 @@ const { getMessaging } = require("firebase-admin/messaging");
 
 initializeApp();
 
-const EDITOR_STATUSES = new Set(["admin", "editor", "editors"]);
+const EDITOR_STATUS = "editor";
 const APP_NOTIFICATION_TITLE = "Flèche-moi ça";
 const WEEKLY_GRIDS_TOPIC = "weekly_grids";
 const ALL_USERS_TOPIC = "all_users";
@@ -111,9 +111,9 @@ async function getRegisteredFCMTokens() {
 async function assertEditor(uid) {
   const db = getFirestore();
   const snapshot = await db.collection("users").doc(uid).get();
-  const status = snapshot.exists ? normalizeStatus(snapshot.get("status") || snapshot.get("role")) : "";
+  const status = snapshot.exists ? normalizeStatus(snapshot.get("status")) : "";
 
-  if (!EDITOR_STATUSES.has(status)) {
+  if (status !== EDITOR_STATUS) {
     throw new HttpsError("permission-denied", "Accès non autorisé.");
   }
 }
