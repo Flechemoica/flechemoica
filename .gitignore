@@ -7,3 +7,16 @@
 
 # Outils locaux des agents
 **/.agents/
+
+# Fichiers generes par macOS
+.DS_Store
+**/.DS_Store
+
+# Reglages personnels de Xcode
+xcuserdata/
+**/xcuserdata/
+*.xcuserstate
+
+# Resultats de compilation Xcode
+DerivedData/
+build/
