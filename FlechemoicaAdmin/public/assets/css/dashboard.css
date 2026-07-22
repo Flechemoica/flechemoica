@@ -1352,6 +1352,21 @@
   min-height: 44px;
 }
 
+.admob-height-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admob-height-control input {
+  width: 64px;
+  min-height: 30px;
+  padding: 4px 6px;
+  text-align: right;
+}
+
 .communication-position-toggle {
   position: relative;
   width: 54px;

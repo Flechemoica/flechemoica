@@ -135,7 +135,7 @@ private struct NativeAdContainer: View {
                             Rectangle().stroke(Color(red: 0.5, green: 0.62, blue: 0.73), lineWidth: 2)
                         }
                     }
-            } else {
+            } else if !loader.didFailToLoad {
                 NativeAdPlaceholder(
                     message: loader.placeholderMessage,
                     fillsAvailableSpace: fillsAvailableSpace
@@ -157,10 +157,12 @@ private struct NativeAdContainer: View {
 private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDelegate {
     @Published var nativeAd: NativeAd?
     @Published private(set) var placeholderMessage = "Chargement de l'annonce native AdMob..."
+    @Published private(set) var didFailToLoad = false
 
     private var adLoader: AdLoader?
     private var isLoading = false
     private var retryCount = 0
+    private var didTryVideoFallback = false
     private var statsUserID: String?
 
     func load(adUnitID: String, userID: String) {
@@ -170,6 +172,7 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
 
         statsUserID = userID
         isLoading = true
+        didFailToLoad = false
         placeholderMessage = "Chargement de l'annonce native AdMob..."
 
         loadAd(adUnitID: adUnitID)
@@ -217,6 +220,7 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
             nativeAd.delegate = self
             self.nativeAd = nativeAd
             self.isLoading = false
+            self.didFailToLoad = false
             self.retryCount = 0
         }
     }
@@ -235,11 +239,21 @@ private final class NativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDe
 
         Task { @MainActor in
             self.nativeAd = nil
-            self.isLoading = false
             self.retryCount = 0
 
-            self.placeholderMessage =
-                "Annonce indisponible — code \(nsError.code) : \(nsError.localizedDescription)"
+            #if DEBUG
+            if nsError.code == 1, !self.didTryVideoFallback {
+                self.didTryVideoFallback = true
+                self.placeholderMessage = "Nouvel essai avec une annonce vidéo de test..."
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                    self?.loadAd(adUnitID: "ca-app-pub-3940256099942544/2521693316")
+                }
+                return
+            }
+            #endif
+
+            self.isLoading = false
+            self.didFailToLoad = true
         }
     }
 }

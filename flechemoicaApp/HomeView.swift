@@ -423,6 +423,7 @@ struct HomeView: View {
 
             let allGrids = snapshot.documents
                 .compactMap(PublishedGrid.init(document:))
+                .filter { isEditor || !$0.isTestGrid }
 
             let nextUpcomingGrid = allGrids
                 .filter { $0.isUpcoming }
@@ -640,6 +641,11 @@ struct HomeView: View {
             let database = Firestore.firestore()
             let snapshot = try await database.collection("grids").document(gridID).getDocument()
             if let grid = PublishedGrid(snapshot: snapshot) {
+                guard isEditor || !grid.isTestGrid else {
+                    gridAccessMessage = "Cette grille est réservée aux comptes Editor."
+                    return
+                }
+
                 guard grid.isPlayable else {
                     gridAccessMessage = "Cette grille est indisponible."
                     return
@@ -809,6 +815,10 @@ private struct PublishedGrid: Identifiable {
     var isPlayable: Bool {
         guard !isUpcoming, let crosswordGrid else { return false }
         return !crosswordGrid.placedWords.isEmpty && !crosswordGrid.solutionLetters.isEmpty
+    }
+
+    var isTestGrid: Bool {
+        title.localizedCaseInsensitiveContains("(test)")
     }
 
     private static let releaseDateFormatter: DateFormatter = {
@@ -1062,6 +1072,7 @@ private struct HomeCommunicationConfig {
     var activeCommunicationIDs: Set<String> = []
     var activeCommunicationID: String?
     var blockHeightPX = 500
+    var admobBannerMaxHeight: CGFloat = 100
     var communicationPositions: [String: Int] = [:]
 
     init() {}
@@ -1073,6 +1084,7 @@ private struct HomeCommunicationConfig {
         activeCommunicationIDs = Set(activeIDs)
         activeCommunicationID = activeIDs.first
         blockHeightPX = Self.normalizedBlockHeight(data["blockHeightPX"])
+        admobBannerMaxHeight = Self.normalizedAdmobBannerMaxHeight(data["admobBannerMaxHeight"])
         communicationPositions = (data["communicationPositions"] as? [String: Any] ?? [:]).reduce(into: [:]) {
             $0[$1.key] = min(3, max(1, ($1.value as? NSNumber)?.intValue ?? 2))
         }
@@ -1095,6 +1107,11 @@ private struct HomeCommunicationConfig {
         }
 
         return min(1100, max(120, rawHeight))
+    }
+
+    private static func normalizedAdmobBannerMaxHeight(_ value: Any?) -> CGFloat {
+        let height = (value as? NSNumber)?.doubleValue ?? 100
+        return CGFloat(min(300, max(50, height)))
     }
 }
 
@@ -1366,8 +1383,8 @@ private struct HomeContent: View {
         return contentWidth / ratio
     }
 
-    private var nativeAdBlockHeight: CGFloat {
-        (contentWidth / (16 / 9)) + 78
+    private var bannerAdBlockHeight: CGFloat {
+        communicationConfig.admobBannerMaxHeight + 15
     }
 
     private var activeCommunicationPosition: Int {
@@ -1438,7 +1455,8 @@ private struct HomeContent: View {
                 userID: userID,
                 isEditor: isEditor,
                 sponsoredBlockHeight: sponsoredBlockHeight,
-                nativeAdBlockHeight: nativeAdBlockHeight,
+                bannerAdBlockHeight: bannerAdBlockHeight,
+                maximumBannerAdHeight: communicationConfig.admobBannerMaxHeight,
                 pollVoteAction: pollVoteAction
             )
         }
@@ -1604,7 +1622,8 @@ private struct HomeAnnouncementCard: View {
     let userID: String
     let isEditor: Bool
     let sponsoredBlockHeight: CGFloat
-    let nativeAdBlockHeight: CGFloat
+    let bannerAdBlockHeight: CGFloat
+    let maximumBannerAdHeight: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
 
     var body: some View {
@@ -1618,6 +1637,7 @@ private struct HomeAnnouncementCard: View {
                     communication: communication,
                     userID: userID,
                     isEditor: isEditor,
+                    maximumBannerAdHeight: maximumBannerAdHeight,
                     pollVoteAction: pollVoteAction
                 )
             } else {
@@ -1627,6 +1647,7 @@ private struct HomeAnnouncementCard: View {
                             communication: communication,
                             userID: userID,
                             isEditor: isEditor,
+                            maximumBannerAdHeight: maximumBannerAdHeight,
                             pollVoteAction: pollVoteAction
                         )
                     }
@@ -1647,7 +1668,7 @@ private struct HomeAnnouncementCard: View {
     }
 
     private var blockHeight: CGFloat {
-        if communications.contains(where: { $0.type == .ad }) { return nativeAdBlockHeight }
+        if communications.contains(where: { $0.type == .ad }) { return bannerAdBlockHeight }
         if communications.contains(where: { $0.type == .sponsored }) { return sponsoredBlockHeight }
         return config.blockHeightPoints
     }
@@ -1710,6 +1731,7 @@ private struct HomeCommunicationSlide: View {
     let communication: HomeCommunication
     let userID: String
     let isEditor: Bool
+    let maximumBannerAdHeight: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
     @State private var didRecordSponsoredImpression = false
 
@@ -1719,11 +1741,9 @@ private struct HomeCommunicationSlide: View {
             case .poll:
                 pollView
             case .ad:
-                HomeNativeAdCard(
-                    adUnitID: "ca-app-pub-1003964550278910/8837551728",
-                    userID: userID,
-                    mediaAspectRatio: 16 / 9,
-                    fillsAvailableSpace: true
+                HomeBannerAdCard(
+                    adUnitID: "ca-app-pub-1003964550278910/2746786097",
+                    maximumAdHeight: maximumBannerAdHeight
                 )
             case .sponsored:
                 sponsoredView
@@ -3099,12 +3119,10 @@ private struct CrosswordCell: View {
             return Color(red: 1.0, green: 0.55, blue: 0.52)
         }
         
-        // case définition sélectionnée
+        // Le segment de définition sélectionné est coloré dans
+        // DefinitionCellSegment. Le fond reste violet pour que l'autre
+        // moitié d'une double définition ne change pas de couleur.
         if isDefinition {
-            if definitionWords.contains(where: { $0.id == selectedWordID }) {
-                return yellow
-            }
-            
             return Color(
                 red: 193 / 255,
                 green: 174 / 255,
@@ -3152,7 +3170,11 @@ private struct CrosswordCell: View {
                     DefinitionArrowView(style: word.arrowStyle)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(isSelected ? Color(red: 0.73, green: 0.95, blue: 0.74).opacity(0.72) : Color.clear)
+                .background(
+                    isSelected
+                        ? Color(red: 243 / 255, green: 231 / 255, blue: 173 / 255)
+                        : Color.clear
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

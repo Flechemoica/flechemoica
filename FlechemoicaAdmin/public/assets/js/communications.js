@@ -8,6 +8,7 @@ const CommunicationsView = (() => {
     isSystem: true,
   };
   const classicBlockHeightPX = 500;
+  const defaultAdmobBannerMaxHeight = 100;
 
   let firestore = null;
   let storage = null;
@@ -22,6 +23,7 @@ const CommunicationsView = (() => {
   let communicationPositions = {};
   let isEnabled = true;
   let blockHeightPX = classicBlockHeightPX;
+  let admobBannerMaxHeight = defaultAdmobBannerMaxHeight;
   let editingCommunicationID = "";
 
   let statusNode = null;
@@ -261,6 +263,7 @@ const CommunicationsView = (() => {
             activeCommunicationIDs = new Set(Array.isArray(data.activeCommunicationIDs) ? data.activeCommunicationIDs : []);
             communicationPositions = data.communicationPositions || {};
             blockHeightPX = normalizeBlockHeight(data.blockHeightPX);
+            admobBannerMaxHeight = normalizeAdmobBannerMaxHeight(data.admobBannerMaxHeight);
             renderConfig();
             renderCommunications();
           },
@@ -362,6 +365,15 @@ const CommunicationsView = (() => {
               <span aria-hidden="true">×</span>
             </button>
           `;
+      const admobHeightControl = communication.id === admobCommunicationID
+        ? `
+            <label class="admob-height-control">
+              <span>Hauteur max</span>
+              <input type="number" min="50" max="300" step="5" value="${admobBannerMaxHeight}" data-admob-banner-max-height>
+              <span>pt</span>
+            </label>
+          `
+        : "";
 
       return `
         <article class="communication-card" data-communication-state="${state}">
@@ -379,6 +391,7 @@ const CommunicationsView = (() => {
               <span>${position}</span>
             </button>
             ${scheduleSummary}
+            ${admobHeightControl}
             <div class="communication-card-actions">${actions}</div>
           </div>
         </article>
@@ -455,6 +468,19 @@ const CommunicationsView = (() => {
           setStatus("");
         } catch (error) {
           setStatus(error.message || "Impossible d’enregistrer la position.", "error");
+        }
+      });
+    });
+
+    listNode.querySelectorAll("[data-admob-banner-max-height]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        admobBannerMaxHeight = normalizeAdmobBannerMaxHeight(input.value);
+        input.value = String(admobBannerMaxHeight);
+        try {
+          await persistConfig();
+          setStatus("Hauteur maximale AdMob enregistrée.");
+        } catch (error) {
+          setStatus(error.message || "Impossible d’enregistrer la hauteur AdMob.", "error");
         }
       });
     });
@@ -770,10 +796,16 @@ const CommunicationsView = (() => {
       isEnabled,
       isTestMode: false,
       blockHeightPX,
+      admobBannerMaxHeight,
       activeCommunicationIDs: Array.from(activeCommunicationIDs),
       communicationPositions,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
+  }
+
+  function normalizeAdmobBannerMaxHeight(value) {
+    const height = Math.round(Number(value) || defaultAdmobBannerMaxHeight);
+    return Math.min(300, Math.max(50, height));
   }
 
   function readDateTimeLocal(value) {

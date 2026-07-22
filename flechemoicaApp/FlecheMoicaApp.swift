@@ -42,6 +42,11 @@ struct FlecheMoicaApp: App {
         FirebaseApp.configure()
 
         #if canImport(GoogleMobileAds)
+        #if DEBUG
+        MobileAds.shared.requestConfiguration.testDeviceIdentifiers = [
+            "2e253a88deb5639735e1a447219311b4"
+        ]
+        #endif
         MobileAds.shared.start()
         #endif
 
