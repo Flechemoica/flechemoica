@@ -105,7 +105,7 @@ private struct AdBadgeIcon: View {
             .foregroundStyle(.black)
             .frame(width: 58, height: 20)
             .background(Color(red: 192 / 255, green: 173 / 255, blue: 238 / 255))
-            .clipShape(RoundedRectangle(cornerRadius: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 
@@ -297,9 +297,10 @@ private struct NativeAdRepresentable: UIViewRepresentable {
             blue: 238 / 255,
             alpha: 1
         )
-        adBadge.layer.cornerRadius = 2
+        adBadge.layer.cornerRadius = 3
         adBadge.clipsToBounds = true
         adBadge.translatesAutoresizingMaskIntoConstraints = false
+        adBadge.accessibilityLabel = "Publicité"
 
         let mediaView = MediaView()
         mediaView.backgroundColor = UIColor.black.withAlphaComponent(0.04)
@@ -360,8 +361,8 @@ private struct NativeAdRepresentable: UIViewRepresentable {
         adView.callToActionView = callToActionButton
 
         NSLayoutConstraint.activate([
-            adBadge.topAnchor.constraint(equalTo: adView.topAnchor, constant: 10),
-            adBadge.leadingAnchor.constraint(equalTo: adView.leadingAnchor, constant: 14),
+            adBadge.topAnchor.constraint(equalTo: adView.topAnchor, constant: 5),
+            adBadge.leadingAnchor.constraint(equalTo: adView.leadingAnchor, constant: 5),
             adBadge.widthAnchor.constraint(equalToConstant: 58),
             adBadge.heightAnchor.constraint(equalToConstant: 20),
 

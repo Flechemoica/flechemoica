@@ -21,6 +21,7 @@ final class AdvertisingConsentManager: ObservableObject {
 
     @Published private(set) var canRequestAds = false
     @Published private(set) var isLevelPlayReady = false
+    @Published private(set) var privacyOptionsRequired = false
     private var preparationTask: Task<Void, Never>?
 
     private init() {}
@@ -34,12 +35,13 @@ final class AdvertisingConsentManager: ObservableObject {
             guard let self else { return }
 
             let umpAllowsAds = await gatherGoogleConsent()
-            await requestTrackingPermissionIfNeeded()
 
             guard umpAllowsAds else {
                 preparationTask = nil
                 return
             }
+
+            await requestTrackingPermissionIfNeeded()
 
             startGoogleMobileAds()
             startLevelPlay()
@@ -51,15 +53,42 @@ final class AdvertisingConsentManager: ObservableObject {
     private func gatherGoogleConsent() async -> Bool {
         #if canImport(UserMessagingPlatform)
         do {
-            try await ConsentInformation.shared.requestConsentInfoUpdate(with: RequestParameters())
+            try await ConsentInformation.shared.requestConsentInfoUpdate(
+                with: RequestParameters()
+            )
+
             try await ConsentForm.loadAndPresentIfRequired(from: nil)
         } catch {
-            print("Impossible de terminer le consentement publicitaire Google :", error)
+            print(
+                "🔴 Impossible de terminer le consentement publicitaire Google :",
+                error.localizedDescription
+            )
         }
+
+        privacyOptionsRequired =
+            ConsentInformation.shared.privacyOptionsRequirementStatus == .required
 
         return ConsentInformation.shared.canRequestAds
         #else
         return true
+        #endif
+    }
+    
+    func presentPrivacyOptions() async {
+        #if canImport(UserMessagingPlatform)
+        do {
+            try await ConsentForm.presentPrivacyOptionsForm(from: nil)
+
+            privacyOptionsRequired =
+                ConsentInformation.shared.privacyOptionsRequirementStatus == .required
+
+            canRequestAds = ConsentInformation.shared.canRequestAds
+        } catch {
+            print(
+                "🔴 Impossible d’afficher les options de confidentialité :",
+                error.localizedDescription
+            )
+        }
         #endif
     }
 

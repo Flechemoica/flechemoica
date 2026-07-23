@@ -3636,6 +3636,8 @@ private struct ProfileSettingsContent: View {
         }
     }
     
+    @ObservedObject private var advertisingConsentManager = AdvertisingConsentManager.shared
+    
     @State private var displayName: String
     @State private var selectedAvatarIndex: Int
     @State private var savedDisplayName: String
@@ -3785,6 +3787,15 @@ private struct ProfileSettingsContent: View {
                         
                         VStack(alignment: .leading, spacing: 14) {
                             SettingsSectionTitle("Confidentialité")
+
+                            if advertisingConsentManager.privacyOptionsRequired {
+                                SettingsMenuButton(title: "Choix de confidentialité") {
+                                    Task {
+                                        await advertisingConsentManager.presentPrivacyOptions()
+                                    }
+                                }
+                            }
+
                             SettingsMenuButton(title: "Supprimer le compte", isDestructive: true) {
                                 activePanel = .deleteAccount
                             }
