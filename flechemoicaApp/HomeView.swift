@@ -1705,7 +1705,8 @@ private struct HomeAnnouncementCard: View {
     }
 
     private var blockHeight: CGFloat {
-        if communications.contains(where: { $0.type == .ad || $0.type == .unityAd }) { return bannerAdBlockHeight }
+        if communications.contains(where: { $0.type == .ad }) { return 280 }
+        if communications.contains(where: { $0.type == .unityAd }) { return bannerAdBlockHeight }
         if communications.contains(where: { $0.type == .sponsored }) { return sponsoredBlockHeight }
         return config.blockHeightPoints
     }
@@ -1779,9 +1780,10 @@ private struct HomeCommunicationSlide: View {
             case .poll:
                 pollView
             case .ad:
-                HomeBannerAdCard(
-                    adUnitID: "ca-app-pub-1003964550278910/2746786097",
-                    maximumAdHeight: maximumBannerAdHeight
+                HomeNativeAdCard(
+                    adUnitID: "ca-app-pub-1003964550278910/8837551728",
+                    userID: userID,
+                    fillsAvailableSpace: true
                 )
             case .unityAd:
                 LevelPlayBannerAdCard(

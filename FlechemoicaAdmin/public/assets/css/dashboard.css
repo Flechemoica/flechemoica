@@ -1333,15 +1333,11 @@
   background: #fff8e8;
 }
 
-.communication-preview-ad strong {
-  display: grid;
-  place-items: center;
-  width: 70px;
-  height: 38px;
-  border-radius: var(--block-radius);
-  background: #fbbf24;
-  color: #ffffff;
-  font-size: 1.18rem;
+.communication-advertiser-logo {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
 }
 
 .communication-card-footer {

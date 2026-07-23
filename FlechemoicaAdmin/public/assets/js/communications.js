@@ -1350,7 +1350,7 @@ const CommunicationsView = (() => {
     if (type.value === "ad") {
       return `
         <div class="communication-preview communication-preview-ad">
-          <strong>AdMob</strong>
+          <img class="communication-advertiser-logo" src="assets/img/services/admob.svg" alt="AdMob">
           <span>Publicité native</span>
         </div>
       `;
@@ -1358,7 +1358,7 @@ const CommunicationsView = (() => {
     if (type.value === "unityAd") {
       return `
         <div class="communication-preview communication-preview-ad">
-          <strong>Unity Ads</strong>
+          <img class="communication-advertiser-logo" src="assets/img/services/unity.svg" alt="Unity Ads">
           <span>Bannière LevelPlay</span>
         </div>
       `;
