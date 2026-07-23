@@ -13,6 +13,8 @@
 		025C894130086EBC0021E547 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894030086EBC0021E547 /* GoogleSignIn */; };
 		025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 025C894230086EBC0021E547 /* GoogleSignInSwift */; };
 		0261879D3009667A00717A18 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 0261879C3009667A00717A18 /* FirebaseMessaging */; };
+		026BB94C3012B70800ED7677 /* UnityMediationSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 026BB94B3012B70800ED7677 /* UnityMediationSDK */; };
+		027A10033012C00100A71003 /* UnityAdsAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = 027A10023012C00100A71002 /* UnityAdsAdapter */; };
 		028364C83009DE7900DF728B /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 028364C73009DE7900DF728B /* FirebaseStorage */; };
 		02BD5BA430102D4900952A92 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 02BD5BA330102D4900952A92 /* GoogleMobileAds */; };
 /* End PBXBuildFile section */
@@ -52,6 +54,8 @@
 				025C894330086EBC0021E547 /* GoogleSignInSwift in Frameworks */,
 				02BD5BA430102D4900952A92 /* GoogleMobileAds in Frameworks */,
 				028364C83009DE7900DF728B /* FirebaseStorage in Frameworks */,
+				026BB94C3012B70800ED7677 /* UnityMediationSDK in Frameworks */,
+				027A10033012C00100A71003 /* UnityAdsAdapter in Frameworks */,
 				025C8938300811370021E547 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
 				020732682FFEED2E00721498 /* FirebaseFirestore in Frameworks */,
 			);
@@ -109,6 +113,8 @@
 				0261879C3009667A00717A18 /* FirebaseMessaging */,
 				028364C73009DE7900DF728B /* FirebaseStorage */,
 				02BD5BA330102D4900952A92 /* GoogleMobileAds */,
+				026BB94B3012B70800ED7677 /* UnityMediationSDK */,
+				027A10023012C00100A71002 /* UnityAdsAdapter */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* flechemoica.app */;
@@ -142,6 +148,8 @@
 				020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				025C893F30086EBC0021E547 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				02BD5BA230102D4900952A92 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+				026BB94A3012B70800ED7677 /* XCRemoteSwiftPackageReference "LevelPlay-Swift-Package" */,
+				027A10013012C00100A71001 /* XCRemoteSwiftPackageReference "LevelPlay-UnityAds-Adapter-Swift-Package" */,
 			);
 			preferredProjectObjectVersion = 100;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -438,6 +446,22 @@
 				minimumVersion = 9.2.0;
 			};
 		};
+		026BB94A3012B70800ED7677 /* XCRemoteSwiftPackageReference "LevelPlay-Swift-Package" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ironsource-mobile/LevelPlay-Swift-Package";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.5.0;
+			};
+		};
+		027A10013012C00100A71001 /* XCRemoteSwiftPackageReference "LevelPlay-UnityAds-Adapter-Swift-Package" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ironsource-mobile/LevelPlay-UnityAds-Adapter-Swift-Package";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
 		02BD5BA230102D4900952A92 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
@@ -478,6 +502,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 020732612FFED28900721498 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		026BB94B3012B70800ED7677 /* UnityMediationSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 026BB94A3012B70800ED7677 /* XCRemoteSwiftPackageReference "LevelPlay-Swift-Package" */;
+			productName = UnityMediationSDK;
+		};
+		027A10023012C00100A71002 /* UnityAdsAdapter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 027A10013012C00100A71001 /* XCRemoteSwiftPackageReference "LevelPlay-UnityAds-Adapter-Swift-Package" */;
+			productName = UnityAdsAdapter;
 		};
 		028364C73009DE7900DF728B /* FirebaseStorage */ = {
 			isa = XCSwiftPackageProductDependency;

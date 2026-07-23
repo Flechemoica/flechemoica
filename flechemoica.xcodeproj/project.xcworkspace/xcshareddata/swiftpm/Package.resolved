@@ -1,5 +1,5 @@
 {
-  "originHash" : "d65aeedacabb7e43a14bb9e04cb41a82af2a417d6c309c17f865b18e6a753a87",
+  "originHash" : "789db363af813115c1b40694d8ab2ce7e9a49afe8dcec43fa8a51c4eeeac18b3",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -128,6 +128,24 @@
       }
     },
     {
+      "identity" : "levelplay-swift-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ironsource-mobile/LevelPlay-Swift-Package",
+      "state" : {
+        "revision" : "812a0d82c0664cedbed7084aa92ff4a7af92da0d",
+        "version" : "9.5.0"
+      }
+    },
+    {
+      "identity" : "levelplay-unityads-adapter-swift-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ironsource-mobile/LevelPlay-UnityAds-Adapter-Swift-Package",
+      "state" : {
+        "branch" : "main",
+        "revision" : "47361bf36342d1ef7e177e39924aacf071ecea88"
+      }
+    },
+    {
       "identity" : "nanopb",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/firebase/nanopb.git",
@@ -161,6 +179,24 @@
       "state" : {
         "revision" : "13b248eaa73b7826f0efb1bcf455e251d65ecb1b",
         "version" : "3.1.0"
+      }
+    },
+    {
+      "identity" : "unity-ad-quality-swift-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ironsource-mobile/Unity-Ad-Quality-Swift-Package",
+      "state" : {
+        "revision" : "bcbd7284d99d7570b8423b52d8ed7bd014215a40",
+        "version" : "9.8.0"
+      }
+    },
+    {
+      "identity" : "unity-ads-swift-package",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Unity-Technologies/Unity-Ads-Swift-Package",
+      "state" : {
+        "revision" : "15e46d4d96b941eb0bc9ae8b9d97574b29618f4d",
+        "version" : "4.19.0"
       }
     }
   ],

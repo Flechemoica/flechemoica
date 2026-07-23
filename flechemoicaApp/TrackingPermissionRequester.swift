@@ -7,6 +7,10 @@ import UIKit
 import GoogleMobileAds
 #endif
 
+#if canImport(IronSource)
+import IronSource
+#endif
+
 #if canImport(UserMessagingPlatform)
 import UserMessagingPlatform
 #endif
@@ -16,6 +20,7 @@ final class AdvertisingConsentManager: ObservableObject {
     static let shared = AdvertisingConsentManager()
 
     @Published private(set) var canRequestAds = false
+    @Published private(set) var isLevelPlayReady = false
     private var preparationTask: Task<Void, Never>?
 
     private init() {}
@@ -37,6 +42,7 @@ final class AdvertisingConsentManager: ObservableObject {
             }
 
             startGoogleMobileAds()
+            startLevelPlay()
             canRequestAds = true
             preparationTask = nil
         }
@@ -90,6 +96,24 @@ final class AdvertisingConsentManager: ObservableObject {
         #endif
 
         MobileAds.shared.start()
+        #endif
+    }
+
+    private func startLevelPlay() {
+        #if canImport(IronSource)
+        let request = LPMInitRequest(appKey: "274fcfac5", userId: nil)
+        LevelPlay.initWith(request) { [weak self] _, error in
+            Task { @MainActor in
+                if let error {
+                    print("🔴 Initialisation LevelPlay impossible :", error.localizedDescription)
+                    self?.isLevelPlayReady = false
+                    return
+                }
+
+                print("🟢 LevelPlay initialisé")
+                self?.isLevelPlayReady = true
+            }
+        }
         #endif
     }
 }

@@ -7,8 +7,17 @@ const CommunicationsView = (() => {
     text: "Publicité AdMob",
     isSystem: true,
   };
+  const unityCommunicationID = "unityCommunication";
+  const unityCommunication = {
+    id: unityCommunicationID,
+    title: "Publicité Unity Ads",
+    type: "unityAd",
+    text: "Publicité Unity Ads",
+    isSystem: true,
+  };
   const classicBlockHeightPX = 500;
   const defaultAdmobBannerMaxHeight = 100;
+  const defaultUnityBannerMaxHeight = 100;
 
   let firestore = null;
   let storage = null;
@@ -24,6 +33,7 @@ const CommunicationsView = (() => {
   let isEnabled = true;
   let blockHeightPX = classicBlockHeightPX;
   let admobBannerMaxHeight = defaultAdmobBannerMaxHeight;
+  let unityBannerMaxHeight = defaultUnityBannerMaxHeight;
   let editingCommunicationID = "";
 
   let statusNode = null;
@@ -264,6 +274,7 @@ const CommunicationsView = (() => {
             communicationPositions = data.communicationPositions || {};
             blockHeightPX = normalizeBlockHeight(data.blockHeightPX);
             admobBannerMaxHeight = normalizeAdmobBannerMaxHeight(data.admobBannerMaxHeight);
+            unityBannerMaxHeight = normalizeUnityBannerMaxHeight(data.unityBannerMaxHeight);
             renderConfig();
             renderCommunications();
           },
@@ -309,11 +320,13 @@ const CommunicationsView = (() => {
       })
       .map((communication) => communication.id));
     const configuredPrimaryID = Array.from(activeCommunicationIDs).find((id) =>
-      id === admobCommunicationID || communications.find((communication) => communication.id === id)?.isTestMode !== true
+      id === admobCommunicationID
+      || id === unityCommunicationID
+      || communications.find((communication) => communication.id === id)?.isTestMode !== true
     );
     const usesAdmobUntilScheduledStart = configuredPrimaryID && scheduledFutureIDs.has(configuredPrimaryID);
 
-    const renderedCommunications = [admobCommunication, ...communications].sort((first, second) => {
+    const renderedCommunications = [admobCommunication, unityCommunication, ...communications].sort((first, second) => {
       const firstActive = activeCommunicationIDs.has(first.id) ? 1 : 0;
       const secondActive = activeCommunicationIDs.has(second.id) ? 1 : 0;
       if (firstActive !== secondActive) return secondActive - firstActive;
@@ -350,7 +363,7 @@ const CommunicationsView = (() => {
       const testBadge = communication.isTestMode === true
         ? '<span class="communication-test-badge">TEST · EDITORS</span>'
         : "";
-      const scheduleSummary = communication.id === admobCommunicationID || type.value === "sponsored"
+      const scheduleSummary = communication.isSystem || type.value === "sponsored"
         ? ""
         : renderScheduleSummary(communication);
       const position = Number(communication.position || communicationPositions[communication.id] || 2);
@@ -374,6 +387,15 @@ const CommunicationsView = (() => {
             </label>
           `
         : "";
+      const unityHeightControl = communication.id === unityCommunicationID
+        ? `
+            <label class="admob-height-control">
+              <span>Hauteur max</span>
+              <input type="number" min="50" max="300" step="5" value="${unityBannerMaxHeight}" data-unity-banner-max-height>
+              <span>pt</span>
+            </label>
+          `
+        : "";
 
       return `
         <article class="communication-card" data-communication-state="${state}">
@@ -392,6 +414,7 @@ const CommunicationsView = (() => {
             </button>
             ${scheduleSummary}
             ${admobHeightControl}
+            ${unityHeightControl}
             <div class="communication-card-actions">${actions}</div>
           </div>
         </article>
@@ -424,7 +447,7 @@ const CommunicationsView = (() => {
             ? new Set([...activeCommunicationIDs, id])
             : new Set([id, ...activeTestIDs]);
           isEnabled = true;
-          if (id !== admobCommunicationID) {
+          if (id !== admobCommunicationID && id !== unityCommunicationID) {
             blockHeightPX = classicBlockHeightPX;
           }
           if (enabledInput) enabledInput.checked = true;
@@ -453,7 +476,7 @@ const CommunicationsView = (() => {
         const currentPosition = Math.max(1, Math.min(3, Number(button.dataset.position) || 2));
         const position = currentPosition === 3 ? 1 : currentPosition + 1;
         try {
-          if (id === admobCommunicationID) {
+          if (id === admobCommunicationID || id === unityCommunicationID) {
             communicationPositions[id] = position;
             await persistConfig();
           } else {
@@ -481,6 +504,19 @@ const CommunicationsView = (() => {
           setStatus("Hauteur maximale AdMob enregistrée.");
         } catch (error) {
           setStatus(error.message || "Impossible d’enregistrer la hauteur AdMob.", "error");
+        }
+      });
+    });
+
+    listNode.querySelectorAll("[data-unity-banner-max-height]").forEach((input) => {
+      input.addEventListener("change", async () => {
+        unityBannerMaxHeight = normalizeUnityBannerMaxHeight(input.value);
+        input.value = String(unityBannerMaxHeight);
+        try {
+          await persistConfig();
+          setStatus("Hauteur maximale Unity Ads enregistrée.");
+        } catch (error) {
+          setStatus(error.message || "Impossible d’enregistrer la hauteur Unity Ads.", "error");
         }
       });
     });
@@ -726,7 +762,11 @@ const CommunicationsView = (() => {
         if (hasFuturePeriod && !isActiveNow) {
           const currentPrimaryID = Array.from(activeCommunicationIDs).find((id) =>
             id !== documentRef.id
-            && (id === admobCommunicationID || communications.find((communication) => communication.id === id)?.isTestMode !== true)
+            && (
+              id === admobCommunicationID
+              || id === unityCommunicationID
+              || communications.find((communication) => communication.id === id)?.isTestMode !== true
+            )
           );
           activeCommunicationIDs = new Set([currentPrimaryID || admobCommunicationID, ...activeTestIDs]);
         } else {
@@ -797,6 +837,7 @@ const CommunicationsView = (() => {
       isTestMode: false,
       blockHeightPX,
       admobBannerMaxHeight,
+      unityBannerMaxHeight,
       activeCommunicationIDs: Array.from(activeCommunicationIDs),
       communicationPositions,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -805,6 +846,11 @@ const CommunicationsView = (() => {
 
   function normalizeAdmobBannerMaxHeight(value) {
     const height = Math.round(Number(value) || defaultAdmobBannerMaxHeight);
+    return Math.min(300, Math.max(50, height));
+  }
+
+  function normalizeUnityBannerMaxHeight(value) {
+    const height = Math.round(Number(value) || defaultUnityBannerMaxHeight);
     return Math.min(300, Math.max(50, height));
   }
 
@@ -1239,6 +1285,7 @@ const CommunicationsView = (() => {
       image: "Image",
       poll: "Sondage",
       ad: "Pub",
+      unityAd: "Pub Unity",
       sponsored: "Publicité client",
     };
 
@@ -1252,6 +1299,7 @@ const CommunicationsView = (() => {
     }
     const storedTitle = String(communication.title || "").trim();
     if (storedTitle) return storedTitle;
+    if (communication.id === unityCommunicationID || type.value === "unityAd") return "Publicité Unity Ads";
     if (communication.id === admobCommunicationID || type.value === "ad") return "Publicité AdMob";
     if (type.value === "poll") return String(communication.text || "").trim() || "Sondage";
     if (type.value === "image") return "Image 1077 x 500";
@@ -1304,6 +1352,14 @@ const CommunicationsView = (() => {
         <div class="communication-preview communication-preview-ad">
           <strong>AdMob</strong>
           <span>Publicité native</span>
+        </div>
+      `;
+    }
+    if (type.value === "unityAd") {
+      return `
+        <div class="communication-preview communication-preview-ad">
+          <strong>Unity Ads</strong>
+          <span>Bannière LevelPlay</span>
         </div>
       `;
     }

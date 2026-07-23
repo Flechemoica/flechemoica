@@ -125,6 +125,10 @@ struct HomeView: View {
             return [.admobCommunication]
         }
 
+        if activeCommunicationID == HomeCommunication.unityCommunicationID {
+            return [.unityCommunication]
+        }
+
         if activeCommunicationID == HomeCommunication.admobCommunicationID {
             return [.admobCommunication]
         }
@@ -1071,6 +1075,7 @@ private struct HomeCommunicationConfig {
     var activeCommunicationID: String?
     var blockHeightPX = 500
     var admobBannerMaxHeight: CGFloat = 100
+    var unityBannerMaxHeight: CGFloat = 100
     var communicationPositions: [String: Int] = [:]
 
     init() {}
@@ -1083,6 +1088,7 @@ private struct HomeCommunicationConfig {
         activeCommunicationID = activeIDs.first
         blockHeightPX = Self.normalizedBlockHeight(data["blockHeightPX"])
         admobBannerMaxHeight = Self.normalizedAdmobBannerMaxHeight(data["admobBannerMaxHeight"])
+        unityBannerMaxHeight = Self.normalizedUnityBannerMaxHeight(data["unityBannerMaxHeight"])
         communicationPositions = (data["communicationPositions"] as? [String: Any] ?? [:]).reduce(into: [:]) {
             $0[$1.key] = min(3, max(1, ($1.value as? NSNumber)?.intValue ?? 2))
         }
@@ -1111,10 +1117,16 @@ private struct HomeCommunicationConfig {
         let height = (value as? NSNumber)?.doubleValue ?? 100
         return CGFloat(min(300, max(50, height)))
     }
+
+    private static func normalizedUnityBannerMaxHeight(_ value: Any?) -> CGFloat {
+        let height = (value as? NSNumber)?.doubleValue ?? 100
+        return CGFloat(min(300, max(50, height)))
+    }
 }
 
 private struct HomeCommunication: Identifiable {
     static let admobCommunicationID = "admobCommunication"
+    static let unityCommunicationID = "unityCommunication"
 
     static let admobCommunication = HomeCommunication(
         id: admobCommunicationID,
@@ -1138,11 +1150,34 @@ private struct HomeCommunication: Identifiable {
         createdAt: .distantFuture
     )
 
+    static let unityCommunication = HomeCommunication(
+        id: unityCommunicationID,
+        type: .unityAd,
+        text: "Publicité Unity Ads",
+        imageOverlayText: "",
+        pollOptions: [],
+        imageURL: nil,
+        imageDataBase64: nil,
+        storagePath: nil,
+        clientName: "",
+        destinationURL: nil,
+        isTestMode: false,
+        imageWidth: nil,
+        imageHeight: nil,
+        mediaKind: "image",
+        displayPeriods: [],
+        position: 2,
+        startsAt: nil,
+        endsAt: nil,
+        createdAt: .distantFuture
+    )
+
     enum CommunicationType: String {
         case text
         case image
         case poll
         case ad
+        case unityAd
         case sponsored
     }
 
@@ -1455,6 +1490,7 @@ private struct HomeContent: View {
                 sponsoredBlockHeight: sponsoredBlockHeight,
                 bannerAdBlockHeight: bannerAdBlockHeight,
                 maximumBannerAdHeight: communicationConfig.admobBannerMaxHeight,
+                maximumUnityBannerAdHeight: communicationConfig.unityBannerMaxHeight,
                 pollVoteAction: pollVoteAction
             )
         }
@@ -1622,6 +1658,7 @@ private struct HomeAnnouncementCard: View {
     let sponsoredBlockHeight: CGFloat
     let bannerAdBlockHeight: CGFloat
     let maximumBannerAdHeight: CGFloat
+    let maximumUnityBannerAdHeight: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
 
     var body: some View {
@@ -1636,6 +1673,7 @@ private struct HomeAnnouncementCard: View {
                     userID: userID,
                     isEditor: isEditor,
                     maximumBannerAdHeight: maximumBannerAdHeight,
+                    maximumUnityBannerAdHeight: maximumUnityBannerAdHeight,
                     pollVoteAction: pollVoteAction
                 )
             } else {
@@ -1646,6 +1684,7 @@ private struct HomeAnnouncementCard: View {
                             userID: userID,
                             isEditor: isEditor,
                             maximumBannerAdHeight: maximumBannerAdHeight,
+                            maximumUnityBannerAdHeight: maximumUnityBannerAdHeight,
                             pollVoteAction: pollVoteAction
                         )
                     }
@@ -1666,7 +1705,7 @@ private struct HomeAnnouncementCard: View {
     }
 
     private var blockHeight: CGFloat {
-        if communications.contains(where: { $0.type == .ad }) { return bannerAdBlockHeight }
+        if communications.contains(where: { $0.type == .ad || $0.type == .unityAd }) { return bannerAdBlockHeight }
         if communications.contains(where: { $0.type == .sponsored }) { return sponsoredBlockHeight }
         return config.blockHeightPoints
     }
@@ -1730,6 +1769,7 @@ private struct HomeCommunicationSlide: View {
     let userID: String
     let isEditor: Bool
     let maximumBannerAdHeight: CGFloat
+    let maximumUnityBannerAdHeight: CGFloat
     let pollVoteAction: (HomeCommunication, String) -> Void
     @State private var didRecordSponsoredImpression = false
 
@@ -1742,6 +1782,11 @@ private struct HomeCommunicationSlide: View {
                 HomeBannerAdCard(
                     adUnitID: "ca-app-pub-1003964550278910/2746786097",
                     maximumAdHeight: maximumBannerAdHeight
+                )
+            case .unityAd:
+                LevelPlayBannerAdCard(
+                    adUnitID: "kr5bqbgtz9l25ev5",
+                    maximumAdHeight: maximumUnityBannerAdHeight
                 )
             case .sponsored:
                 sponsoredView
