@@ -1,4 +1,6 @@
 const GridsView = (() => {
+    const CLOUDFLARE_WORDS_API_URL =
+      "https://words-api.morning-star-ae22.workers.dev/api/words/import";
   let unsubscribe = null;
   let firestore = null;
   let tableBody = null;
@@ -1107,7 +1109,44 @@ const GridsView = (() => {
       setStatus(error.message || "Impossible de lire le fichier JSON.", "error");
     }
   }
+    function extractGridWords(grid) {
+      if (!Array.isArray(grid?.placedWords)) {
+        return [];
+      }
 
+      return [
+        ...new Set(
+          grid.placedWords
+            .map((entry) => String(entry?.word || "").trim().toUpperCase())
+            .filter(Boolean)
+        ),
+      ];
+    }
+
+    async function sendGridWordsToCloudflare(grid) {
+      const words = extractGridWords(grid);
+
+      if (!words.length) {
+        return;
+      }
+
+      const response = await fetch(CLOUDFLARE_WORDS_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ words }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ||
+          `Erreur Cloudflare ${response.status}`
+        );
+      }
+    }
   async function addGridFromImport(event) {
     event.preventDefault();
 
@@ -1134,10 +1173,19 @@ const GridsView = (() => {
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
-      const docRef = firestore.collection("grids").doc();
-      await docRef.set(gridData);
+        const docRef = firestore.collection("grids").doc();
+        await docRef.set(gridData);
 
-      importForm.reset();
+        try {
+          await sendGridWordsToCloudflare(grid);
+        } catch (cloudflareError) {
+          console.error(
+            "La grille a été ajoutée, mais les mots n’ont pas été envoyés à Cloudflare :",
+            cloudflareError
+          );
+        }
+
+        importForm.reset();
       hideImportForm();
       setStatus("Grille ajoutée et planifiée.");
     } catch (error) {

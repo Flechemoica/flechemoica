@@ -326,14 +326,20 @@ const CommunicationsView = (() => {
     );
     const usesAdmobUntilScheduledStart = configuredPrimaryID && scheduledFutureIDs.has(configuredPrimaryID);
 
-    const renderedCommunications = [admobCommunication, unityCommunication, ...communications].sort((first, second) => {
-      const firstActive = activeCommunicationIDs.has(first.id) ? 1 : 0;
-      const secondActive = activeCommunicationIDs.has(second.id) ? 1 : 0;
-      if (firstActive !== secondActive) return secondActive - firstActive;
-      if (first.isSystem && !second.isSystem) return -1;
-      if (!first.isSystem && second.isSystem) return 1;
-      return 0;
-    });
+      const renderedCommunications = [admobCommunication, ...communications, unityCommunication].sort((first, second) => {
+        // Unity Ads reste toujours tout en bas.
+        if (first.id === unityCommunicationID) return 1;
+        if (second.id === unityCommunicationID) return -1;
+
+        const firstActive = activeCommunicationIDs.has(first.id) ? 1 : 0;
+        const secondActive = activeCommunicationIDs.has(second.id) ? 1 : 0;
+
+        if (firstActive !== secondActive) return secondActive - firstActive;
+        if (first.isSystem && !second.isSystem) return -1;
+        if (!first.isSystem && second.isSystem) return 1;
+
+        return 0;
+      });
 
     if (!renderedCommunications.length) {
       listNode.innerHTML = '<div class="notification-card"><h3>Aucune communication</h3></div>';
@@ -348,12 +354,24 @@ const CommunicationsView = (() => {
       const hasFuturePeriod = periods.some((period) =>
         period.startsAt && period.endsAt && now < period.startsAt && period.startsAt < period.endsAt
       );
-      const isScheduled = !isCurrentlyScheduled && hasFuturePeriod;
-      const isEffectivelyActive = activeCommunicationIDs.has(communication.id)
-        || (communication.id === admobCommunicationID && usesAdmobUntilScheduledStart);
-      const checked = !isScheduled && isEffectivelyActive ? "checked" : "";
-      const disabled = isScheduled ? "disabled" : "";
-      const state = isScheduled ? "scheduled" : (checked ? "active" : "inactive");
+        const isScheduled = !isCurrentlyScheduled && hasFuturePeriod;
+        const isUnityDisabled = communication.id === unityCommunicationID;
+
+        const isEffectivelyActive = !isUnityDisabled && (
+          activeCommunicationIDs.has(communication.id)
+          || (communication.id === admobCommunicationID && usesAdmobUntilScheduledStart)
+        );
+
+        const checked = !isScheduled && isEffectivelyActive ? "checked" : "";
+        const disabled = isScheduled || isUnityDisabled ? "disabled" : "";
+
+        const state = isUnityDisabled
+          ? "disabled"
+          : isScheduled
+            ? "scheduled"
+            : checked
+              ? "active"
+              : "inactive";
       const toggleLabel = isScheduled
         ? "Communication programmée — modification depuis le formulaire uniquement"
         : "Activer cette communication";
@@ -383,14 +401,38 @@ const CommunicationsView = (() => {
         ? `
             <label class="admob-height-control">
               <span>Hauteur max</span>
-              <input type="number" min="50" max="300" step="5" value="${unityBannerMaxHeight}" data-unity-banner-max-height>
+              <input
+                type="number"
+                min="50"
+                max="300"
+                step="5"
+                value="${unityBannerMaxHeight}"
+                data-unity-banner-max-height
+                disabled
+              >
               <span>pt</span>
             </label>
           `
         : "";
 
+        const cardStyle = isUnityDisabled
+          ? [
+              "opacity: 0.42",
+              "filter: grayscale(1)",
+              "background: #e5e7eb",
+              "border-color: #c5c9d0",
+              "pointer-events: none",
+              "user-select: none"
+            ].join(";")
+          : "";
+        
       return `
-        <article class="communication-card" data-communication-state="${state}">
+        <article
+          class="communication-card"
+          data-communication-state="${state}"
+          style="${cardStyle}"
+          aria-disabled="${isUnityDisabled ? "true" : "false"}"
+        >
           <div class="communication-card-heading">
             <h3 class="communication-card-title">${escapeHTML(title)}</h3>
             ${testBadge}
@@ -401,12 +443,19 @@ const CommunicationsView = (() => {
               <input id="communication-card-${escapeAttribute(communication.id)}" type="checkbox" data-communication-active="${escapeAttribute(communication.id)}" ${checked} ${disabled}>
               <span></span>
             </label>
-            <button class="communication-position-toggle" type="button" data-communication-position="${escapeAttribute(communication.id)}" data-position="${position}" aria-label="Position ${position} du bloc" title="Cliquer pour changer la position">
+            <button
+              class="communication-position-toggle"
+              type="button"
+              data-communication-position="${escapeAttribute(communication.id)}"
+              data-position="${position}"
+              aria-label="Position ${position} du bloc"
+              title="${isUnityDisabled ? "Unity Ads indisponible" : "Cliquer pour changer la position"}"
+              ${isUnityDisabled ? "disabled" : ""}
+            >
               <span>${position}</span>
             </button>
             ${scheduleSummary}
             ${unityHeightControl}
-            <div class="communication-card-actions">${actions}</div>
             <div class="communication-card-actions">${actions}</div>
           </div>
         </article>
@@ -1332,7 +1381,6 @@ const CommunicationsView = (() => {
       return `
         <div class="communication-preview communication-preview-ad">
           <img class="communication-advertiser-logo" src="assets/img/services/admob.svg" alt="AdMob">
-          <span>Publicité native</span>
         </div>
       `;
     }
@@ -1340,7 +1388,6 @@ const CommunicationsView = (() => {
       return `
         <div class="communication-preview communication-preview-ad">
           <img class="communication-advertiser-logo" src="assets/img/services/unity.svg" alt="Unity Ads">
-          <span>Bannière LevelPlay</span>
         </div>
       `;
     }
