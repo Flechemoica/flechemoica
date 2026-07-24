@@ -1,12 +1,14 @@
 const GridsView = (() => {
-    const CLOUDFLARE_WORDS_API_URL =
-      "https://words-api.morning-star-ae22.workers.dev/api/words/import";
+  const CLOUDFLARE_WORDS_API_URL =
+    "https://words-api.morning-star-ae22.workers.dev/api/words/import";
+
   let unsubscribe = null;
   let firestore = null;
   let tableBody = null;
   let tableShell = null;
   let statusNode = null;
   let searchInput = null;
+  let refreshWordsButton = null;
   let addButton = null;
   let importForm = null;
   let importTitleInput = null;
@@ -52,6 +54,7 @@ const GridsView = (() => {
     tableShell = document.getElementById("grids-table-shell");
     statusNode = document.getElementById("grids-status");
     searchInput = document.getElementById("grids-search");
+    refreshWordsButton = document.getElementById("refresh-words-button");
     addButton = document.getElementById("add-grid-button");
     importForm = document.getElementById("grid-import-form");
     importTitleInput = document.getElementById("grid-import-title");
@@ -79,6 +82,11 @@ const GridsView = (() => {
     if (searchInput && !searchInput.dataset.bound) {
       searchInput.addEventListener("input", () => renderGrids(filterGrids()));
       searchInput.dataset.bound = "true";
+    }
+
+    if (refreshWordsButton && !refreshWordsButton.dataset.bound) {
+      refreshWordsButton.addEventListener("click", syncExistingGridWords);
+      refreshWordsButton.dataset.bound = "true";
     }
 
     if (addButton && !addButton.dataset.bound) {
@@ -1109,44 +1117,116 @@ const GridsView = (() => {
       setStatus(error.message || "Impossible de lire le fichier JSON.", "error");
     }
   }
-    function extractGridWords(grid) {
-      if (!Array.isArray(grid?.placedWords)) {
-        return [];
-      }
 
-      return [
-        ...new Set(
-          grid.placedWords
-            .map((entry) => String(entry?.word || "").trim().toUpperCase())
-            .filter(Boolean)
-        ),
-      ];
+  function extractGridWords(grid) {
+    if (!Array.isArray(grid?.placedWords)) {
+      return [];
     }
 
-    async function sendGridWordsToCloudflare(grid) {
-      const words = extractGridWords(grid);
+    return [
+      ...new Set(
+        grid.placedWords
+          .map((entry) => String(entry?.word || "").trim().toUpperCase())
+          .filter(Boolean)
+      ),
+    ];
+  }
 
-      if (!words.length) {
+  async function sendWordsToCloudflare(words) {
+    const uniqueWords = [
+      ...new Set(
+        words
+          .map((word) => String(word || "").trim().toUpperCase())
+          .filter(Boolean)
+      ),
+    ];
+
+    if (!uniqueWords.length) {
+      return {
+        success: true,
+        received: 0,
+        processed: 0,
+      };
+    }
+
+    const response = await fetch(CLOUDFLARE_WORDS_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ words: uniqueWords }),
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(
+        result?.error ||
+        `Erreur Cloudflare ${response.status}`
+      );
+    }
+
+    return result || {
+      success: true,
+      received: uniqueWords.length,
+      processed: uniqueWords.length,
+    };
+  }
+
+  async function sendGridWordsToCloudflare(grid) {
+    return sendWordsToCloudflare(extractGridWords(grid));
+  }
+
+  async function syncExistingGridWords() {
+    if (!refreshWordsButton) return;
+
+    try {
+      await ensureFirestore();
+
+      refreshWordsButton.disabled = true;
+      refreshWordsButton.setAttribute("aria-busy", "true");
+      setStatus("Synchronisation des mots...");
+
+      const eligibleGrids = grids.filter((doc) => {
+        const status = normalizeStatus(doc.data()?.status);
+        return status === "published" || status === "scheduled";
+      });
+
+      const words = eligibleGrids.flatMap((doc) => {
+        const grid = getGridPayload(doc.data());
+        return extractGridWords(grid);
+      });
+
+      const uniqueWords = [...new Set(words)];
+
+      if (!eligibleGrids.length) {
+        setStatus("Aucune grille publiée ou planifiée à synchroniser.");
         return;
       }
 
-      const response = await fetch(CLOUDFLARE_WORDS_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ words }),
-      });
+      if (!uniqueWords.length) {
+        setStatus("Aucun mot trouvé dans les grilles concernées.");
+        return;
+      }
 
-      const result = await response.json().catch(() => null);
+      await sendWordsToCloudflare(uniqueWords);
 
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-          `Erreur Cloudflare ${response.status}`
-        );
+      setStatus(
+        `${uniqueWords.length} mot${uniqueWords.length > 1 ? "s" : ""} synchronisé${uniqueWords.length > 1 ? "s" : ""} depuis ${eligibleGrids.length} grille${eligibleGrids.length > 1 ? "s" : ""}.`
+      );
+    } catch (error) {
+      setStatus(
+        error.message || "Impossible de synchroniser les mots.",
+        "error"
+      );
+    } finally {
+      if (refreshWordsButton) {
+        refreshWordsButton.disabled = false;
+        refreshWordsButton.removeAttribute("aria-busy");
       }
     }
+  }
+
   async function addGridFromImport(event) {
     event.preventDefault();
 
@@ -1173,19 +1253,19 @@ const GridsView = (() => {
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       };
-        const docRef = firestore.collection("grids").doc();
-        await docRef.set(gridData);
+      const docRef = firestore.collection("grids").doc();
+      await docRef.set(gridData);
 
-        try {
-          await sendGridWordsToCloudflare(grid);
-        } catch (cloudflareError) {
-          console.error(
-            "La grille a été ajoutée, mais les mots n’ont pas été envoyés à Cloudflare :",
-            cloudflareError
-          );
-        }
+      try {
+        await sendGridWordsToCloudflare(grid);
+      } catch (cloudflareError) {
+        console.error(
+          "La grille a été ajoutée, mais les mots n’ont pas été envoyés à Cloudflare :",
+          cloudflareError
+        );
+      }
 
-        importForm.reset();
+      importForm.reset();
       hideImportForm();
       setStatus("Grille ajoutée et planifiée.");
     } catch (error) {

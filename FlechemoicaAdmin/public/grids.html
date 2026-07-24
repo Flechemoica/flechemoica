@@ -5,6 +5,13 @@
   <div class="users-toolbar grids-toolbar">
     <label class="sr-only" for="grids-search">Rechercher une grille</label>
     <input id="grids-search" type="search" placeholder="Rechercher" autocomplete="off">
+    <button
+      class="ghost-button compact-button"
+      id="refresh-words-button"
+      type="button"
+      aria-label="Synchroniser les mots des grilles publiées et planifiées"
+      title="Synchroniser les mots avec Cloudflare"
+    >↻</button>
     <button class="primary-button compact-button" id="add-grid-button" type="button">+</button>
     <p class="panel-status" id="grids-status" role="status" aria-live="polite"></p>
   </div>
