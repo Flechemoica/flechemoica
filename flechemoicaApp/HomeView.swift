@@ -1421,8 +1421,16 @@ private struct HomeContent: View {
     }
 
     private var activeCommunicationPosition: Int {
-        guard let communication = activeCommunications.first else { return 2 }
-        return communication.position
+        guard let communication = activeCommunications.first else {
+            return 2
+        }
+
+        if let configuredPosition =
+            communicationConfig.communicationPositions[communication.id] {
+            return min(3, max(1, configuredPosition))
+        }
+
+        return min(3, max(1, communication.position))
     }
 
     var body: some View {

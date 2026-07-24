@@ -378,15 +378,7 @@ const CommunicationsView = (() => {
               <span aria-hidden="true">×</span>
             </button>
           `;
-      const admobHeightControl = communication.id === admobCommunicationID
-        ? `
-            <label class="admob-height-control">
-              <span>Hauteur max</span>
-              <input type="number" min="50" max="300" step="5" value="${admobBannerMaxHeight}" data-admob-banner-max-height>
-              <span>pt</span>
-            </label>
-          `
-        : "";
+      
       const unityHeightControl = communication.id === unityCommunicationID
         ? `
             <label class="admob-height-control">
@@ -413,8 +405,8 @@ const CommunicationsView = (() => {
               <span>${position}</span>
             </button>
             ${scheduleSummary}
-            ${admobHeightControl}
             ${unityHeightControl}
+            <div class="communication-card-actions">${actions}</div>
             <div class="communication-card-actions">${actions}</div>
           </div>
         </article>
@@ -495,18 +487,7 @@ const CommunicationsView = (() => {
       });
     });
 
-    listNode.querySelectorAll("[data-admob-banner-max-height]").forEach((input) => {
-      input.addEventListener("change", async () => {
-        admobBannerMaxHeight = normalizeAdmobBannerMaxHeight(input.value);
-        input.value = String(admobBannerMaxHeight);
-        try {
-          await persistConfig();
-          setStatus("Hauteur maximale AdMob enregistrée.");
-        } catch (error) {
-          setStatus(error.message || "Impossible d’enregistrer la hauteur AdMob.", "error");
-        }
-      });
-    });
+    
 
     listNode.querySelectorAll("[data-unity-banner-max-height]").forEach((input) => {
       input.addEventListener("change", async () => {
